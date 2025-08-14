@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Project Manager Dashboard</title>
+  <link rel="stylesheet" href="PM-dasboard.css" />
+</head>
+<body>
+  <!-- ======================== SIDEBAR ======================== -->
+<div class="sidebar">
+<div class="logo">
+    <img src="SHR-LOGO-CORE-WHITE-r2s9u89e4bid2abizvtsncwzc48kzhlzz6fuhv7oko.webp" alt="Solano Logo">
+</div>
+<nav>
+    <ul>
+    <li><a href="#" onclick="loadContent(event, 'dashboard')">Dashboard</a></li>
+    <li><a href="#" id="showInboxBtn">Inbox</a></li>
+    <li><a href="#" onclick="loadContent(event, 'document')">Document</a></li>
+    <li><a href="LogIn.html">Logout</a></li>
+    </ul>
+</nav>
+</div>
+
+<!-- Main content area -->
+<main class="main-content">
+<div id="mainContent">
+    <h1 id="Greeting">Welcome Back!</h1>
+    <p>Select an option from the sidebar.</p>
+</div>
+</main>
+
+<script type="module">
+// ================= FIREBASE SETUP =================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
+import { getFirestore, collection, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAz8CoOb7k45On36GEQRcFPDxTvtdzU1ss",
+    authDomain: "solanodb-a4f65.firebaseapp.com",
+    projectId: "solanodb-a4f65",
+    storageBucket: "solanodb-a4f65.firebasestorage.app",
+    messagingSenderId: "98081894649",
+    appId: "1:98081894649:web:67f3e3d0ef8d3b7a013228"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const showInboxBtn = document.getElementById("showInboxBtn");
+const mainContent = document.getElementById("mainContent");
+
+// ================= CONTENT LOADER =================
+window.loadContent = function(event, section) {
+    event.preventDefault();
+
+    // Update active tab styling
+    document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+    if (event.target.tagName === 'A') {
+    event.target.classList.add('active');
+    }
+
+    // Clear main content
+    mainContent.innerHTML = '';
+
+    // Load specific section
+    switch (section) {
+    case 'dashboard':
+        mainContent.innerHTML = `
+        <h1 id="Greeting1">Dashboard</h1>
+        <p>This is your dashboard overview.</p>
+        `;
+        break;
+    case 'document':
+        mainContent.innerHTML = `
+        <h1>Documents</h1>
+        <ul>
+            <li>Project Plan.pdf</li>
+            <li>Tenant Agreement.docx</li>
+            <li>Maintenance Report.xlsx</li>
+        </ul>
+        `;
+        break;
+    default:
+        mainContent.innerHTML = '<h1>Welcome</h1><p>Select an option from the sidebar.</p>';
+    }
+};
+
+// ================= AUTH + INBOX FETCH =================
+onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+    alert("You're not signed in. Redirecting to login...");
+    window.location.href = "index.html";
+    } else {
+    showInboxBtn.disabled = false;
+
+    showInboxBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+
+        // Highlight active tab
+        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+        showInboxBtn.classList.add('active');
+
+        // Load inbox content
+        mainContent.innerHTML = `
+        <h3>Inbox Messages</h3>
+        <div id="messagesList">Loading...</div>
+        `;
+
+        const messagesList = document.getElementById("messagesList");
+
+        try {
+        const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            messagesList.innerHTML = "<p>No messages yet.</p>";
+            return;
+        }
+
+        messagesList.innerHTML = "";
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const messageEl = document.createElement("div");
+            messageEl.className = "message";
+            messageEl.innerHTML = `
+            <strong>Name:</strong> ${data.name}<br/>
+            <strong>Email:</strong> ${data.email}<br/>
+            <strong>Number:</strong> ${data.number}<br/>
+            <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
+            <strong>Message:</strong> ${data.message}<br/>
+            `;
+            messagesList.appendChild(messageEl);
+        });
+        } catch (error) {
+        messagesList.innerHTML = "Error loading messages: " + error.message;
+        }
+    });
+    }
+});
+//   <!-- ======================== lalabas account name ======================== -->
+function updateGreeting() {
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+    const greeting = document.getElementById('Greeting1');
+    const nameToShow = user.displayName || user.email;
+    if (greeting) {
+        greeting.textContent =` Welcome, ${nameToShow}`;
+    }
+    }
+});
+}
+function showWelcomeBack() {
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+    const greeting = document.getElementById('Greeting');
+    const nameToShow = user.displayName || user.email;
+    if (greeting) {
+        greeting.textContent =` Welcome Back!, ${nameToShow}`;
+    }
+    }
+});
+}
+showWelcomeBack();
+  </script>
+</body>
+</html>

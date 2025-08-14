@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard – Solano Hills</title>
+    <link rel="stylesheet" href="dashboard.css" />
+    </head>
+    <body>
+
+    <!-- ======================== SIDEBAR ======================== -->
+    <div class="sidebar">
+    <div class="logo">
+        <img src="SHR-LOGO-CORE-WHITE-r2s9u89e4bid2abizvtsncwzc48kzhlzz6fuhv7oko.webp" alt="Solano Logo">
+    </div>
+    <nav>
+        <ul>
+        <li><a href="#" onclick="loadContent('dashboard')">Dashboard</a></li>
+        <li><a href="#" onclick="loadContent('Payment Received')">Payment Received</a></li>
+        <li><a href="#" onclick="loadContent('Maintenance Requests')">Maintenance Requests</a></li>
+        <li><a href="#" onclick="loadContent('Tenant Account Creation')">Tenant Account Creation</a></li>
+        <li><a href="#" onclick="loadContent('Feedback Received')">Feedback Received</a></li>
+        <li><a href="LogIn.html">Logout</a></li>
+        </ul>
+    </nav>
+    </div>
+
+    <!-- ======================== MAIN CONTENT ======================== -->
+    <main class="main-content">
+    <div id="mainContent">
+        <h1>Welcome, <span id="admin-name">[Admin Name]</span></h1>
+        <p>Select a menu option from the left to get started.</p>
+    </div>
+    </main>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+    <script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAz8CoOb7k45On36GEQRcFPDxTvtdzU1ss",
+        authDomain: "solanodb-a4f65.firebaseapp.com",
+        projectId: "solanodb-a4f65",
+        storageBucket: "solanodb-a4f65.appspot.com",
+        messagingSenderId: "98081894649",
+        appId: "1:98081894649:web:67f3e3d0ef8d3b7a013228"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Use current logged-in admin (no auto login)
+    auth.onAuthStateChanged(user => {
+        if (user) {
+        document.getElementById('admin-name').textContent = user.email;
+        console.log("Admin already logged in:", user.email);
+        } else {
+        // Not logged in — redirect to login page
+        window.location.href = "Login.html";
+        }
+    });
+
+    // Load page content based on menu
+    function loadContent(section) {
+        const area = document.getElementById('mainContent');
+        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+        event.target.classList.add('active');
+
+        switch(section) {
+        case 'dashboard':
+            area.innerHTML = '<h1>Dashboard</h1><p>Check Tenant Requests.</p>';
+            break;
+        case 'Payment Received':
+            area.innerHTML = '<h1>Payments Received</h1><p>View Payments of Tenants</p>';
+            break;
+        case 'Maintenance Requests':
+            area.innerHTML = '<h1>Maintenance</h1><p>Maintenance Requests From Tenants</p>';
+            break;
+        case 'Tenant Account Creation':
+  area.innerHTML = `
+    <h1>Create New Tenant Account</h1>
+    <form id="createTenantForm">
+      <input type="email" id="tenantEmail" placeholder="Tenant Email" required style="padding:10px;margin-bottom:10px;width:100%;"/>
+      <input type="password" id="tenantPassword" placeholder="Temporary Password" required style="padding:10px;margin-bottom:10px;width:100%;"/>
+      <button type="submit" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:6px;">Create Tenant</button>
+    </form>
+    <p id="statusMessage" style="margin-top:10px;"></p>
+  `;
+
+  // Delay listener attachment to allow rendering
+  setTimeout(() => {
+    const form = document.getElementById('createTenantForm');
+    const statusMessage = document.getElementById('statusMessage');
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('tenantEmail').value;
+      const password = document.getElementById('tenantPassword').value;
+
+      try {
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+
+        await db.collection("users").doc(user.uid).set({
+          email: email,
+          role: "tenant",
+          mustChangePassword: true,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        statusMessage.style.color = 'lightgreen';
+        statusMessage.textContent = "✅ Tenant created successfully!";
+        form.reset();
+      } catch (error) {
+        statusMessage.style.color = 'red';
+        statusMessage.textContent = "❌ Error: " + error.message;
+      }
+    });
+  }, 100);
+  break;
+
+        case 'Feedback Received':
+            area.innerHTML = '<h1>Feedback from Tenants</h1><div id="feedback-list">Loading...</div>';
+            loadFeedbacks();
+            break;
+        default:
+            area.innerHTML = '<h1>Welcome</h1><p>Select a menu option from the sidebar.</p>';
+        }
+    }
+
+    // Fetch feedbacks from Firestore
+    function loadFeedbacks() {
+        const feedbackList = document.getElementById('feedback-list');
+        feedbackList.innerHTML = '<p>Loading feedback...</p>';
+
+        db.collection("feedback")
+        .orderBy("timestamp", "desc")
+        .get()
+        .then(snapshot => {
+            if (snapshot.empty) {
+            feedbackList.innerHTML = '<p>No feedback found.</p>';
+            return;
+            }
+
+            feedbackList.innerHTML = "";
+            snapshot.forEach(doc => {
+            const data = doc.data();
+            const item = document.createElement("div");
+            item.className = "feedback-item";
+            item.style.border = "1px solid #ccc";
+            item.style.padding = "10px";
+            item.style.marginBottom = "10px";
+            item.innerHTML = `
+                <strong>From:</strong> ${data.tenantEmail || "Unknown"}<br/>
+                <strong>Message:</strong> ${data.message || "No message"}<br/>
+                <small>${new Date(data.timestamp?.seconds * 1000).toLocaleString()}</small>
+            `;
+            feedbackList.appendChild(item);
+            });
+        })
+        .catch(error => {
+            feedbackList.innerHTML = `<p>Error loading feedback: ${error.message}</p>`;
+        });
+    }
+    </script>
+    </body>
+    </html>

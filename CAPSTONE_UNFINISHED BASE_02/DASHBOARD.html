@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tenant Dashboard – Solano Hills</title>
+  <link rel="stylesheet" href="Dashboard.css" />
+</head>
+<body>
+
+  <!-- ======================== SIDEBAR ======================== -->
+  <div class="sidebar">
+    <div class="logo">
+      <img src="SHR-LOGO-CORE-WHITE-r2s9u89e4bid2abizvtsncwzc48kzhlzz6fuhv7oko.webp" alt="Solano Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="#" onclick="loadContent(event, 'dashboard')">Dashboard</a></li>
+        <li><a href="#" onclick="loadContent(event, 'profile')">My Profile</a></li>
+        <li><a href="#" onclick="loadContent(event, 'maintenance')">Maintenance</a></li>
+        <li><a href="#" onclick="loadContent(event, 'billing')">Billing and Payments</a></li>
+        <li><a href="#" onclick="loadContent(event, 'feedback')">Feedback</a></li>
+        <li><a href="LogIn.html">Logout</a></li>
+      </ul>
+    </nav>
+  </div>
+
+  <!-- ======================== MAIN CONTENT ======================== -->
+  <main class="main-content">
+        <div id="mainContent">
+         <h1 id="tenantGreeting">Welcome back, Tenant</h1>
+         <p>Select a menu option from the left to get started.</p>
+        </div>
+  </main>
+
+  <!-- ======================== FIREBASE SCRIPTS ======================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+    import {
+      getAuth,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAz8CoOb7k45On36GEQRcFPDxTvtdzU1ss",
+      authDomain: "solanodb-a4f65.firebaseapp.com",
+      projectId: "solanodb-a4f65",
+      storageBucket: "solanodb-a4f65.firebasestorage.app",
+      messagingSenderId: "98081894649",
+      appId: "1:98081894649:web:67f3e3d0ef8d3b7a013228"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const mainContent = document.getElementById('mainContent');
+
+    window.loadContent = function(event, section) {
+      event.preventDefault();
+      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+      event.target.classList.add('active');
+
+      switch(section) {
+        case 'dashboard':
+          mainContent.innerHTML = `<h1 id="tenantGreeting1">Hi,</h1><p>Here is the Overview of your account and recent activity.</p>`;
+          updateGreeting();
+          break;
+        case 'profile':
+          mainContent.innerHTML = '<h1>My Profile</h1><p>View and edit your personal information.</p>';
+          break;
+        case 'maintenance':
+          mainContent.innerHTML = '<h1>Maintenance</h1><p>Submit maintenance requests here.</p>';
+          break;
+        case 'billing':
+          mainContent.innerHTML = '<h1>Billing and Payments</h1><p>View and pay your bills securely.</p>';
+          break;
+        case 'feedback':
+          loadFeedbackForm();
+          break;
+        default:
+          mainContent.innerHTML = '<p>Section not found.</p>';
+      }
+    }
+
+    function loadFeedbackForm() {
+      mainContent.innerHTML = `
+        <div class="feedback-container">
+          <h2>Send Feedback to Admin</h2>
+          <form id="feedbackForm">
+            <textarea id="feedbackText" placeholder="Write your feedback..." required style="width:100%;height:120px;padding:10px;border-radius:8px;"></textarea>
+            <br/>
+            <button type="submit" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px;">Send Feedback</button>
+          </form>
+          <p id="statusMessage" style="margin-top:10px;color:green;"></p>
+        </div>
+      `;
+
+      const form = document.getElementById("feedbackForm");
+      const feedbackText = document.getElementById("feedbackText");
+      const statusMessage = document.getElementById("statusMessage");
+
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          statusMessage.textContent = "Please log in to send feedback.";
+          form.style.display = "none";
+        } else {
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            try {
+              await addDoc(collection(db, "feedback"), {
+                tenantEmail: user.email,
+                message: feedbackText.value,
+                timestamp: serverTimestamp()
+              });
+
+              statusMessage.textContent = "Feedback sent successfully!";
+              feedbackText.value = "";
+            } catch (error) {
+              console.error("Error sending feedback: ", error);
+              statusMessage.textContent = "Error sending feedback.";
+              statusMessage.style.color = "red";
+            }
+          });
+          
+        }
+      });
+    }
+//   <!-- ======================== lalabas account name ======================== -->
+    function updateGreeting() {
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+        const greeting = document.getElementById('tenantGreeting1');
+        const nameToShow = user.displayName || user.email;
+        if (greeting) {
+            greeting.textContent = `Hi, ${nameToShow}`;
+        }
+        }
+    });
+    }
+    function showWelcomeBack() {
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+        const greeting = document.getElementById('tenantGreeting');
+        const nameToShow = user.displayName || user.email;
+        if (greeting) {
+            greeting.textContent = `Welcome back, ${nameToShow}`;
+        }
+        }
+    });
+    }
+    showWelcomeBack();
+  </script>
+</body>
+</html>
