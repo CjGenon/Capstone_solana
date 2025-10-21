@@ -107,52 +107,85 @@
       showInboxBtn.disabled = false;
 
       showInboxBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
+      e.preventDefault();
 
-        // Highlight active tab
-        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-        showInboxBtn.classList.add('active');
+      // Highlight active tab
+      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+      showInboxBtn.classList.add('active');
 
-        // Load inbox content
-        mainContent.innerHTML = `
-          <h3>Inbox Messages</h3>
-          <div id="messagesList">Loading...</div>
-        `;
+      // Load inbox structure
+      mainContent.innerHTML = `
+        <h3>Inbox Messages</h3>
+        <div id="unrepliedSection">
+          <h4>📩 Unreplied Messages</h4>
+          <div id="unrepliedList">Loading...</div>
+        </div>
 
-        const messagesList = document.getElementById("messagesList");
+        <button id="toggleRepliedBtn" style="margin-top:20px; background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
+          Show Replied Messages ▼
+        </button>
 
-        try {
-          const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
-          const snapshot = await getDocs(q);
+        <div id="repliedSection" style="display:none; margin-top:10px;">
+          <h4>✅ Replied Messages</h4>
+          <div id="repliedList"></div>
+        </div>
+      `;
 
-          if (snapshot.empty) {
-            messagesList.innerHTML = "<p>No messages yet.</p>";
-            return;
-          }
+      const unrepliedList = document.getElementById("unrepliedList");
+      const repliedList = document.getElementById("repliedList");
+      const repliedSection = document.getElementById("repliedSection");
+      const toggleBtn = document.getElementById("toggleRepliedBtn");
 
-          messagesList.innerHTML = "";
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const messageEl = document.createElement("div");
-            messageEl.className = "message";
-            messageEl.innerHTML = `
-              <strong>Name:</strong> ${data.name}<br/>
-              <strong>Email:</strong> ${data.email}<br/>
-              <strong>Number:</strong> ${data.number}<br/>
-              <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
-              <strong>Message:</strong> ${data.message}<br/>
-              <button onclick="showReplyForm('${data.email}', '${doc.id}', '${data.name}')">Reply</button>
-              <div id="reply-${doc.id}" style="display:none; margin-top:10px;">
-                <textarea id="replyText-${doc.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
-                <button onclick="sendReply('${data.email}', '${doc.id}', '${data.name}')">Send Reply</button>
-              </div>
-            `;
-            messagesList.appendChild(messageEl);
-          });
-        } catch (error) {
-          messagesList.innerHTML = "Error loading messages: " + error.message;
-        }
+      // Toggle replied visibility
+      toggleBtn.addEventListener("click", () => {
+        const isVisible = repliedSection.style.display === "block";
+        repliedSection.style.display = isVisible ? "none" : "block";
+        toggleBtn.textContent = isVisible ? "Show Replied Messages ▼" : "Hide Replied Messages ▲";
       });
+
+      try {
+        const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+          unrepliedList.innerHTML = "<p>No messages yet.</p>";
+          return;
+        }
+
+        unrepliedList.innerHTML = "";
+        repliedList.innerHTML = "";
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const messageEl = document.createElement("div");
+          messageEl.className = "message";
+          messageEl.innerHTML = `
+            <strong>Name:</strong> ${data.name}<br/>
+            <strong>Email:</strong> ${data.email}<br/>
+            <strong>Number:</strong> ${data.number}<br/>
+            <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
+            <strong>Message:</strong> ${data.message}<br/>
+            ${
+              data.replied
+                ? `<em style="color:green;">(Already Replied)</em>`
+                : `<button onclick="showReplyForm('${data.email}', '${doc.id}', '${data.name}')">Reply</button>
+                  <div id="reply-${doc.id}" style="display:none; margin-top:10px;">
+                    <textarea id="replyText-${doc.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
+                    <button onclick="sendReply('${data.email}', '${doc.id}', '${data.name}')">Send Reply</button>
+                  </div>`
+            }
+          `;
+
+          if (data.replied) {
+            repliedList.appendChild(messageEl);
+          } else {
+            unrepliedList.appendChild(messageEl);
+          }
+        });
+      } catch (error) {
+        unrepliedList.innerHTML = "Error loading messages: " + error.message;
+      }
+    });
     });
 
     // ================= SHOW REPLY FORM =================
@@ -161,6 +194,8 @@
     };
 
     // ================= SEND REPLY VIA EMAILJS =================
+    import { updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+
     window.sendReply = async function(toEmail, id, toName) {
       const replyText = document.getElementById(`replyText-${id}`).value.trim();
       if (!replyText) {
@@ -169,16 +204,19 @@
       }
 
       const templateParams = {
-        to_email: toEmail,                 // matches {{to_email}}
-        name: "Apartment Inbox Manager",   // matches {{name}}
-        from_name: "Project Manager",      // matches {{from_name}}
-        message: replyText,                // matches {{message}}
-        title: "Reply from Apartment Manager" // matches {{title}}
+        to_email: toEmail,
+        name: "Project Manager",
+        from_name: "Project Manager",
+        message: replyText,
+        title: "Reply from Project Manager"
       };
 
       try {
         await emailjs.send("service_u1n5d9t", "template_f2fwz7a", templateParams);
-        alert("✅ Reply sent successfully to " + toEmail);
+        alert("Reply sent successfully to " + toEmail);
+
+        const messageRef = doc(db, "messages", id);
+        await updateDoc(messageRef, { replied: true });
 
         await addDoc(collection(db, "sentReplies"), {
           to: toEmail,
@@ -188,11 +226,15 @@
 
         document.getElementById(`reply-${id}`).style.display = 'none';
         document.getElementById(`replyText-${id}`).value = '';
+
+        // Refresh js kowd :>
+        showInboxBtn.click();
       } catch (error) {
         console.error("EmailJS Error:", error);
-        alert("❌ Failed to send reply: " + JSON.stringify(error));
+        alert("Failed to send reply: " + JSON.stringify(error));
       }
     };
+
     //   <!-- ======================== lalabas account name ======================== -->
     function updateGreeting() {
     onAuthStateChanged(auth, (user) => {
