@@ -59,35 +59,130 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    function getCurrentUserEmail() {
+    return new Promise(resolve => {
+      const unsubscribe = onAuthStateChanged(auth, user => {
+        unsubscribe();
+        resolve(user ? user.email : "Unknown Tenant");
+      });
+    });
+  }
 
     const mainContent = document.getElementById('mainContent');
 
-    window.loadContent = function(event, section) {
-      event.preventDefault();
-      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-      event.target.classList.add('active');
+window.loadContent = function(event, section) {
+  event.preventDefault();
+  document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+  event.target.classList.add('active');
+  //ui for each tabs dto//
+  switch(section) {
+    case 'dashboard':
+      mainContent.innerHTML = `<h1 id="tenantGreeting1">Hi,</h1><p>Here is the Overview of your account and recent activity.</p>`;
+      updateGreeting();
+      break;
 
-      switch(section) {
-        case 'dashboard':
-          mainContent.innerHTML = `<h1 id="tenantGreeting1">Hi,</h1><p>Here is the Overview of your account and recent activity.</p>`;
-          updateGreeting();
-          break;
-        case 'profile':
-          mainContent.innerHTML = '<h1>My Profile</h1><p>View and edit your personal information.</p>';
-          break;
-        case 'maintenance':
-          mainContent.innerHTML = '<h1>Maintenance</h1><p>Submit maintenance requests here.</p>';
-          break;
-        case 'billing':
-          mainContent.innerHTML = '<h1>Billing and Payments</h1><p>View and pay your bills securely.</p>';
-          break;
-        case 'feedback':
-          loadFeedbackForm();
-          break;
-        default:
-          mainContent.innerHTML = '<p>Section not found.</p>';
-      }
-    }
+    case 'profile':
+      mainContent.innerHTML = '<h1>My Profile</h1><p>View and edit your personal information.</p>';
+      break;
+
+    case 'maintenance':
+      mainContent.innerHTML = `
+        <div class="maintenance-tab">
+          <h2>One Click Maintenance</h2>
+
+          <label for="problem">Select a Problem:</label>
+          <select id="problem">
+            <option value="">-- Select --</option>
+            <option value="leak">Water Leak</option>
+            <option value="electric">Electrical Issue</option>
+            <option value="broken">Broken Furniture</option>
+            <option value="aircon">Air Conditioning Problem</option>
+            <option value="plumbing">Plumbing Issue</option>
+            <option value="other">Other</option>
+          </select>
+
+          <div class="other-section" id="otherSection" style="display:none; margin-top:15px;">
+            <label for="imageUpload">Upload Image (optional):</label>
+            <input type="file" id="imageUpload" accept="image/*" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;">
+
+            <label for="comment" style="display:block; margin-top:10px;">Describe the Problem:</label>
+            <textarea id="comment" rows="4" placeholder="Write details here..." style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;"></textarea>
+          </div>
+
+          <button id="submitReport" style="margin-top:20px; background-color:#007bff; color:white; border:none; border-radius:10px; padding:10px 20px; width:100%; cursor:pointer; font-size:16px;">Submit Report</button>
+          <p id="statusMessage" style="margin-top:10px; color:green;"></p>
+        </div>
+      `;
+
+      const problemSelect = document.getElementById('problem');
+      const otherSection = document.getElementById('otherSection');
+      const submitButton = document.getElementById('submitReport');
+      const statusMessage = document.getElementById('statusMessage');
+
+      problemSelect.addEventListener('change', () => {
+        otherSection.style.display = (problemSelect.value === 'other') ? 'block' : 'none';
+      });
+
+      submitButton.addEventListener('click', async () => {
+        const problem = problemSelect.value;
+        const comment = document.getElementById('comment')?.value || '';
+        const imageFile = document.getElementById('imageUpload')?.files[0];
+
+        if (!problem) {
+          alert('Please select a problem type.');
+          return;
+        }
+
+        statusMessage.style.color = "gray";
+        statusMessage.textContent = "Submitting your request...";
+
+        //current user info di pa gumagana sadly
+        const user = auth.currentUser;
+        if (!user) {
+          alert("Please log in first.");
+          return;
+        }
+
+        try {
+          // (If na activate na ang Storage later,ayusin nlng to)
+          let imageUrl = "";
+
+        const tenantEmail = await getCurrentUserEmail();
+
+        await addDoc(collection(db, "maintenanceRequests"), {
+          tenantEmail,
+          problem,
+          comment,
+          imageUrl,
+          timestamp: serverTimestamp()
+        });
+          statusMessage.style.color = "green";
+          statusMessage.textContent = "Maintenance request submitted successfully!";
+          problemSelect.value = "";
+          document.getElementById('comment').value = "";
+          document.getElementById('imageUpload').value = "";
+          otherSection.style.display = "none";
+        } catch (error) {
+          console.error("Error submitting request: ", error);
+          statusMessage.style.color = "red";
+          statusMessage.textContent = "Failed to submit request: " + error.message;
+        }
+      });
+      break;
+
+    case 'billing':
+      mainContent.innerHTML = '<h1>Billing and Payments</h1><p>View and pay your bills securely.</p>';
+      break;
+
+    case 'feedback':
+      loadFeedbackForm();
+      break;
+
+    default:
+      mainContent.innerHTML = '<p>Section not found.</p>';
+  }
+}
+
 
     function loadFeedbackForm() {
       mainContent.innerHTML = `
