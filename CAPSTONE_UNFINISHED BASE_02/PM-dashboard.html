@@ -25,7 +25,7 @@
   <main class="main-content">
     <div id="mainContent">
       <h1 id="Greeting">Welcome Back!</h1>
-      <p>Select an option from the sidebar.</p>
+      <p>Select a sidebar to start managing.</p>
     </div>
   </main>
 
@@ -33,7 +33,7 @@
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <script>
     (function() {
-      emailjs.init("avvdJIIs04H8nGyu_"); // ✅ Your EmailJS Public Key
+      emailjs.init("avvdJIIs04H8nGyu_"); 
     })();
   </script>
 
@@ -41,7 +41,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-    import { getFirestore, collection, query, orderBy, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+    import { getFirestore, collection, query, orderBy, getDocs, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
     // ================= FIREBASE CONFIG =================
     const firebaseConfig = {
@@ -62,38 +62,72 @@
 
     // ================= CONTENT LOADER =================
     window.loadContent = function(event, section) {
-        event.preventDefault();
+      event.preventDefault();
 
-        // Update active tab styling
-        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-        if (event.target.tagName === 'A') {
+      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+      if (event.target.tagName === 'A') {
         event.target.classList.add('active');
-        }
+      }
 
-        // Clear main content
-        mainContent.innerHTML = '';
+      mainContent.innerHTML = '';
 
-        // Load specific section
-        switch (section) {
+      switch (section) {
         case 'dashboard':
-            mainContent.innerHTML = `
+          mainContent.innerHTML = `
             <h1 id="Greeting1">Dashboard</h1>
             <p>This is your dashboard overview.</p>
-            `;
-            break;
+          `;
+          break;
+
         case 'document':
-            mainContent.innerHTML = `
-            <h1>Documents</h1>
-            <ul>
-                <li>Project Plan.pdf</li>
-                <li>Tenant Agreement.docx</li>
-                <li>Maintenance Report.xlsx</li>
-            </ul>
-            `;
-            break;
+          mainContent.innerHTML = `
+            <h1>Tenant Document Upload</h1>
+            <form id="tenantDocForm">
+              <label>Tenant Name:</label><br>
+              <input type="text" id="tenantName" placeholder="Enter tenant name" required><br><br>
+
+              <label>Upload Document:</label><br>
+              <input type="file" id="tenantFile" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+              <input type="file" id="tenantFile" accept=".pdf,.doc,.docx,.jpg,.png" required><br><br>
+
+              <button type="submit" style="background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
+                Submit Document
+              </button>
+            </form>
+            <div id="uploadStatus" style="margin-top:10px;"></div>
+            <h3 style="margin-top:20px;">Recent Submissions</h3>
+            <ul id="recentUploads"></ul>
+          `;
+
+          // Simple client-side handling dahil wala pang storage sa firebase
+          const form = document.getElementById("tenantDocForm");
+          const status = document.getElementById("uploadStatus");
+          const list = document.getElementById("recentUploads");
+
+          form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const tenantName = document.getElementById("tenantName").value.trim();
+            const file = document.getElementById("tenantFile").files[0];
+
+            if (!tenantName || !file) {
+              status.textContent = "Please complete all fields.";
+              return;
+            }
+
+            status.textContent = `Document "${file.name}" for "${tenantName}" has been submitted (not yet uploaded).`;
+
+            // Add to local preview list nag rereset pag nirefresh ang page for now
+            const li = document.createElement("li");
+            li.textContent = `${tenantName} - ${file.name}`;
+            list.prepend(li);
+
+            form.reset();
+          });
+          break;
+
         default:
-            mainContent.innerHTML = '<h1>Welcome</h1><p>Select an option from the sidebar.</p>';
-        }
+          mainContent.innerHTML = '<h1>Welcome</h1><p>Select an option from the sidebar.</p>';
+      }
     };
 
     // ================= AUTH + LOAD INBOX =================
@@ -107,85 +141,82 @@
       showInboxBtn.disabled = false;
 
       showInboxBtn.addEventListener("click", async (e) => {
-      e.preventDefault();
+        e.preventDefault();
 
-      // Highlight active tab
-      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-      showInboxBtn.classList.add('active');
+        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
+        showInboxBtn.classList.add('active');
 
-      // Load inbox structure
-      mainContent.innerHTML = `
-        <h3>Inbox Messages</h3>
-        <div id="unrepliedSection">
-          <h4>📩 Unreplied Messages</h4>
-          <div id="unrepliedList">Loading...</div>
-        </div>
+        mainContent.innerHTML = `
+          <h3>Inbox Messages</h3>
+          <div id="unrepliedSection">
+            <h4>Unreplied Messages</h4>
+            <div id="unrepliedList">Loading...</div>
+          </div>
 
-        <button id="toggleRepliedBtn" style="margin-top:20px; background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
-          Show Replied Messages ▼
-        </button>
+          <button id="toggleRepliedBtn" style="margin-top:20px; background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
+            Show Replied Messages ▼
+          </button>
 
-        <div id="repliedSection" style="display:none; margin-top:10px;">
-          <h4>✅ Replied Messages</h4>
-          <div id="repliedList"></div>
-        </div>
-      `;
+          <div id="repliedSection" style="display:none; margin-top:10px;">
+            <h4>Replied Messages</h4>
+            <div id="repliedList"></div>
+          </div>
+        `;
 
-      const unrepliedList = document.getElementById("unrepliedList");
-      const repliedList = document.getElementById("repliedList");
-      const repliedSection = document.getElementById("repliedSection");
-      const toggleBtn = document.getElementById("toggleRepliedBtn");
+        const unrepliedList = document.getElementById("unrepliedList");
+        const repliedList = document.getElementById("repliedList");
+        const repliedSection = document.getElementById("repliedSection");
+        const toggleBtn = document.getElementById("toggleRepliedBtn");
 
-      // Toggle replied visibility
-      toggleBtn.addEventListener("click", () => {
-        const isVisible = repliedSection.style.display === "block";
-        repliedSection.style.display = isVisible ? "none" : "block";
-        toggleBtn.textContent = isVisible ? "Show Replied Messages ▼" : "Hide Replied Messages ▲";
-      });
-
-      try {
-        const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-          unrepliedList.innerHTML = "<p>No messages yet.</p>";
-          return;
-        }
-
-        unrepliedList.innerHTML = "";
-        repliedList.innerHTML = "";
-
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const messageEl = document.createElement("div");
-          messageEl.className = "message";
-          messageEl.innerHTML = `
-            <strong>Name:</strong> ${data.name}<br/>
-            <strong>Email:</strong> ${data.email}<br/>
-            <strong>Number:</strong> ${data.number}<br/>
-            <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
-            <strong>Message:</strong> ${data.message}<br/>
-            ${
-              data.replied
-                ? `<em style="color:green;">(Already Replied)</em>`
-                : `<button onclick="showReplyForm('${data.email}', '${doc.id}', '${data.name}')">Reply</button>
-                  <div id="reply-${doc.id}" style="display:none; margin-top:10px;">
-                    <textarea id="replyText-${doc.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
-                    <button onclick="sendReply('${data.email}', '${doc.id}', '${data.name}')">Send Reply</button>
-                  </div>`
-            }
-          `;
-
-          if (data.replied) {
-            repliedList.appendChild(messageEl);
-          } else {
-            unrepliedList.appendChild(messageEl);
-          }
+        toggleBtn.addEventListener("click", () => {
+          const isVisible = repliedSection.style.display === "block";
+          repliedSection.style.display = isVisible ? "none" : "block";
+          toggleBtn.textContent = isVisible ? "Show Replied Messages ▼" : "Hide Replied Messages ▲";
         });
-      } catch (error) {
-        unrepliedList.innerHTML = "Error loading messages: " + error.message;
-      }
-    });
+
+        try {
+          const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+          const snapshot = await getDocs(q);
+
+          if (snapshot.empty) {
+            unrepliedList.innerHTML = "<p>No messages yet.</p>";
+            return;
+          }
+
+          unrepliedList.innerHTML = "";
+          repliedList.innerHTML = "";
+
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const messageEl = document.createElement("div");
+            messageEl.className = "message";
+            messageEl.innerHTML = `
+              <strong>Name:</strong> ${data.name}<br/>
+              <strong>Email:</strong> ${data.email}<br/>
+              <strong>Number:</strong> ${data.number}<br/>
+              <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
+              <strong>Message:</strong> ${data.message}<br/>
+              ${
+                data.replied
+                  ? `<em style="color:green;">(Already Replied)</em>`
+                  : `<button onclick="showReplyForm('${data.email}', '${doc.id}', '${data.name}')">Reply</button>
+                    <div id="reply-${doc.id}" style="display:none; margin-top:10px;">
+                      <textarea id="replyText-${doc.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
+                      <button onclick="sendReply('${data.email}', '${doc.id}', '${data.name}')">Send Reply</button>
+                    </div>`
+              }
+            `;
+
+            if (data.replied) {
+              repliedList.appendChild(messageEl);
+            } else {
+              unrepliedList.appendChild(messageEl);
+            }
+          });
+        } catch (error) {
+          unrepliedList.innerHTML = "Error loading messages: " + error.message;
+        }
+      });
     });
 
     // ================= SHOW REPLY FORM =================
@@ -194,8 +225,6 @@
     };
 
     // ================= SEND REPLY VIA EMAILJS =================
-    import { updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
-
     window.sendReply = async function(toEmail, id, toName) {
       const replyText = document.getElementById(`replyText-${id}`).value.trim();
       if (!replyText) {
@@ -227,7 +256,6 @@
         document.getElementById(`reply-${id}`).style.display = 'none';
         document.getElementById(`replyText-${id}`).value = '';
 
-        // Refresh js kowd :>
         showInboxBtn.click();
       } catch (error) {
         console.error("EmailJS Error:", error);
@@ -235,28 +263,17 @@
       }
     };
 
-    //   <!-- ======================== lalabas account name ======================== -->
-    function updateGreeting() {
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-        const greeting = document.getElementById('Greeting1');
-        const nameToShow = user.displayName || user.email;
-        if (greeting) {
-            greeting.textContent =` Welcome, ${nameToShow}`;
-        }
-        }
-    });
-    }
+    // ================= GREETING =================
     function showWelcomeBack() {
-    onAuthStateChanged(auth, (user) => {
+      onAuthStateChanged(auth, (user) => {
         if (user) {
-        const greeting = document.getElementById('Greeting');
-        const nameToShow = user.displayName || user.email;
-        if (greeting) {
-            greeting.textContent =` Welcome Back!, ${nameToShow}`;
+          const greeting = document.getElementById('Greeting');
+          const nameToShow = user.displayName || user.email;
+          if (greeting) {
+            greeting.textContent = `Welcome Back!, ${nameToShow}`;
+          }
         }
-        }
-    });
+      });
     }
     showWelcomeBack();
   </script>
