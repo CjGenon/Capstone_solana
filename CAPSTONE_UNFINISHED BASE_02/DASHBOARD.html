@@ -95,7 +95,6 @@ window.loadContent = function(event, section) {
             <option value="">-- Select --</option>
             <option value="leak">Water Leak</option>
             <option value="electric">Electrical Issue</option>
-            <option value="broken">Broken Furniture</option>
             <option value="aircon">Air Conditioning Problem</option>
             <option value="plumbing">Plumbing Issue</option>
             <option value="other">Other</option>
@@ -135,13 +134,6 @@ window.loadContent = function(event, section) {
 
         statusMessage.style.color = "gray";
         statusMessage.textContent = "Submitting your request...";
-
-        //current user info di pa gumagana sadly
-        const user = auth.currentUser;
-        if (!user) {
-          alert("Please log in first.");
-          return;
-        }
 
         try {
           // (If na activate na ang Storage later,ayusin nlng to)
