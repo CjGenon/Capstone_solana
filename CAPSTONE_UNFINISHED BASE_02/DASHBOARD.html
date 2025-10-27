@@ -108,7 +108,7 @@ window.loadContent = function(event, section) {
             <textarea id="comment" rows="4" placeholder="Write details here..." style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;"></textarea>
           </div>
 
-          <button id="submitReport" style="margin-top:20px; background-color:#007bff; color:white; border:none; border-radius:10px; padding:10px 20px; width:100%; cursor:pointer; font-size:16px;">Submit Report</button>
+          <button id="submitReport" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px;">Submit Report</button>
           <p id="statusMessage" style="margin-top:10px; color:green;"></p>
         </div>
       `;
@@ -174,8 +174,6 @@ window.loadContent = function(event, section) {
       mainContent.innerHTML = '<p>Section not found.</p>';
   }
 }
-
-
     function loadFeedbackForm() {
       mainContent.innerHTML = `
         <div class="feedback-container">
