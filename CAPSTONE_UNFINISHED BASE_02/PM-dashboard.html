@@ -82,48 +82,85 @@
         case 'document':
           mainContent.innerHTML = `
             <h1>Tenant Document Upload</h1>
-            <form id="tenantDocForm">
-              <label>Tenant Name:</label><br>
-              <input type="text" id="tenantName" placeholder="Enter tenant name" required><br><br>
+            <form id="tenantDocForm" enctype="multipart/form-data">
 
-              <label>Upload Document:</label><br>
-              <input type="file" id="tenantFile" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-              <input type="file" id="tenantFile" accept=".pdf,.doc,.docx,.jpg,.png" required><br><br>
+              <label>Tenant Name:</label><br>
+              <input type="text" name="tenant_name" id="tenantName" placeholder="Enter tenant name" required><br><br>
+
+              <label>Attachment 1:</label><br>
+              <input type="file" name="file1" id="file1" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 2:</label><br>
+              <input type="file" name="file2" id="file2" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 3:</label><br>
+              <input type="file" name="file3" id="file3" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 4:</label><br>
+              <input type="file" name="file4" id="file4" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 5:</label><br>
+              <input type="file" name="file5" id="file5" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 6:</label><br>
+              <input type="file" name="file6" id="file6" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 7:</label><br>
+              <input type="file" name="file7" id="file7" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
+
+              <label>Attachment 8:</label><br>
+              <input type="file" name="file8" id="file8" accept=".pdf,.doc,.docx,.jpg,.png" required><br><br>
 
               <button type="submit" style="background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
                 Submit Document
               </button>
             </form>
+
             <div id="uploadStatus" style="margin-top:10px;"></div>
             <h3 style="margin-top:20px;">Recent Submissions</h3>
             <ul id="recentUploads"></ul>
           `;
 
-          // Simple client-side handling dahil wala pang storage sa firebase
           const form = document.getElementById("tenantDocForm");
           const status = document.getElementById("uploadStatus");
           const list = document.getElementById("recentUploads");
 
-          form.addEventListener("submit", (e) => {
+          form.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const tenantName = document.getElementById("tenantName").value.trim();
-            const file = document.getElementById("tenantFile").files[0];
 
-            if (!tenantName || !file) {
-              status.textContent = "Please complete all fields.";
+            status.style.color = "black";
+            status.textContent = "Uploading and sending...";
+
+            const tenantNameField = document.getElementById("tenantName");
+            if (!tenantNameField.value.trim()) {
+              status.style.color = "red";
+              status.textContent = "Tenant name is required.";
               return;
             }
 
-            status.textContent = `Document "${file.name}" for "${tenantName}" has been submitted (not yet uploaded).`;
+            try {
+              await emailjs.sendForm(
+                "service_rtrzm39",
+                "template_f2fwz7a",
+                form,
+                "avvdJIIs04H8nGyu_"
+              );
 
-            // Add to local preview list nag rereset pag nirefresh ang page for now
-            const li = document.createElement("li");
-            li.textContent = `${tenantName} - ${file.name}`;
-            list.prepend(li);
+              status.style.color = "green";
+              status.textContent = `✅ Documents sent for "${tenantNameField.value}" ✅`;
 
-            form.reset();
+              const li = document.createElement("li");
+              li.textContent = `${tenantNameField.value} — Sent @ ${new Date().toLocaleString()}`;
+              list.prepend(li);
+
+              form.reset();
+            } catch (error) {
+              status.style.color = "red";
+              status.textContent = "❌ Failed to send: " + error.message;
+            }
           });
           break;
+
 
         default:
           mainContent.innerHTML = '<h1>Welcome</h1><p>Select an option from the sidebar.</p>';
