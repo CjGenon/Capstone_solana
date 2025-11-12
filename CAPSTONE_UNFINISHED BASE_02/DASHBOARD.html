@@ -35,7 +35,8 @@
   </main>
 
   <!-- ======================== FIREBASE SCRIPTS ======================== -->
-  <script type="module">
+   <script src="https://www.paypal.com/sdk/js?client-id=ASbUIe1_A3shQqfiUe1_TnYnp7jGyD-_pClj10rYjAG7Fmbu_sPi6s8LoJD2bRv6bT2XkJBo-FpPO5t4&currency=PHP"></script>
+   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
@@ -82,9 +83,9 @@
 
         case 'maintenance':
           mainContent.innerHTML = `
-            <div class="maintenance-tab" style="display:flex; gap:20px;">
+            <div class="maintenance-tab" style="display:flex; gap:20px; flex-wrap: wrap;">
               <!-- Form Section -->
-              <div style="flex:2;">
+              <div style="flex:2; min-width:300px;">
                 <h2>Maintenance Request</h2>
                 <p><strong>What issue do you want to report?</strong></p>
 
@@ -94,6 +95,7 @@
                   <option value="plumbing">Plumbing</option>
                   <option value="electrical">Electrical</option>
                   <option value="aircon">Air Conditioning</option>
+                  <option value="unit">Unit Maintenance</option>
                   <option value="other">Others</option>
                 </select>
 
@@ -105,21 +107,66 @@
                   <input type="file" id="imageUpload" accept="image/jpeg" multiple style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;">
                 </div>
 
+                <label for="preferredDate" style="margin-top:15px; display:block;">Select preferred maintenance visit date and time:</label>
+                <input type="datetime-local" id="preferredDate" style="width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;" min="" />
+
                 <button id="submitReport" style="margin-top:15px; padding:10px 20px; background:#8d6c39; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px;">Submit</button>
 
                 <p id="statusMessage" style="margin-top:10px; color:green;"></p>
+
+                <div style="margin-top:20px; font-size:14px; padding:10px; border-radius:6px; color:#fff;">
+                  <strong>Tenant Responsibilities:</strong>
+                  <ul>
+                    <li>Be available during the scheduled visit.</li>
+                    <li>Provide access to the unit.</li>
+                    <li>Report any urgent issues immediately.</li>
+                  </ul>
+
+                  <strong>Expected Response Times:</strong>
+                  <ul>
+                    <li>Non-urgent issues: within 3 business days.</li>
+                    <li>Urgent issues (e.g. plumbing leaks): within 24 hours.</li>
+                  </ul>
+                </div>
               </div>
 
               <!-- History / Status Section -->
-              <div style="flex:1; border-left:1px solid #ccc; padding-left:15px;">
+              <div style="flex:1; min-width:300px; border-left:1px solid #ccc; padding-left:15px; max-height:600px; overflow-y:auto; font-size:14px; color:#ffff; border-radius:6px;">
                 <h3>Request History</h3>
-                <div id="historyList" style="max-height:400px; overflow-y:auto; font-size:14px; color:white;">
+                <div id="historyList" style="max-height:520px; overflow-y:auto;">
                   <p>Loading your requests...</p>
                 </div>
               </div>
             </div>
           `;
 
+          // Helper function to format date with AM/PM
+          function formatDateTimeAMPM(date) {
+            if (!(date instanceof Date)) {
+              if (date && date.toDate) {
+                date = date.toDate();
+              } else {
+                return "Invalid date";
+              }
+            }
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // the hour '0' should be '12'
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
+          }
+
+          // Set minimum datetime-local to current date/time (rounded up to next 15 min)
+          const preferredDateInput = document.getElementById('preferredDate');
+          const now = new Date();
+          now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15);
+          preferredDateInput.min = now.toISOString().slice(0, 16);
+
+          // Existing variables
           const problemSelect = document.getElementById('problem');
           const otherSection = document.getElementById('otherSection');
           const submitButton = document.getElementById('submitReport');
@@ -149,10 +196,11 @@
               for (const doc of querySnapshot.docs) {
                 const data = doc.data();
                 const docId = doc.id;
-                const timeStamp = data.timestamp ? data.timestamp.toDate().toLocaleString() : "N/A";
+                const timeStamp = data.timestamp ? formatDateTimeAMPM(data.timestamp) : "N/A";
                 const status = data.status || "Pending";
-                const responseTime = data.responseTime ? (data.responseTime.toDate ? data.responseTime.toDate().toLocaleString() : data.responseTime) : "Not yet responded";
+                const responseTime = data.responseTime ? formatDateTimeAMPM(data.responseTime) : "Not yet responded";
                 const maintenanceName = data.maintenanceName || "Not assigned";
+                const scheduledVisit = data.preferredVisitTime ? formatDateTimeAMPM(data.preferredVisitTime) : "Not scheduled";
 
                 const item = document.createElement('div');
                 item.style.borderBottom = "1px solid #ddd";
@@ -166,6 +214,8 @@
 
                 item.innerHTML = `
                   <strong>Issue:</strong> ${data.problem}<br/>
+                  <strong>Description:</strong> ${data.comment || "-"}<br/>
+                  <strong>Scheduled Visit:</strong> ${scheduledVisit}<br/>
                   <strong>Status:</strong> ${status}<br/>
                   <strong>Maintenance Personnel:</strong> ${maintenanceName}<br/>
                   <strong>Response Time:</strong> ${responseTime}<br/>
@@ -189,7 +239,7 @@
                   responsesContainer.innerHTML = '';
                   responsesSnapshot.forEach(respDoc => {
                     const respData = respDoc.data();
-                    const time = respData.timestamp ? respData.timestamp.toDate().toLocaleString() : "No timestamp";
+                    const time = respData.timestamp ? formatDateTimeAMPM(respData.timestamp) : "No timestamp";
                     const respDiv = document.createElement('div');
                     respDiv.style.marginBottom = '6px';
                     respDiv.innerHTML = `
@@ -210,9 +260,22 @@
           submitButton.addEventListener('click', async () => {
             const problem = problemSelect.value;
             const comment = otherComment.value.trim();
+            const preferredVisitTime = preferredDateInput.value;
 
             if (!problem) {
               alert('Please select an issue type.');
+              return;
+            }
+
+            if (!preferredVisitTime) {
+              alert('Please select your preferred maintenance visit date and time.');
+              return;
+            }
+
+            const selectedDate = new Date(preferredVisitTime);
+            const nowDate = new Date();
+            if (selectedDate < nowDate) {
+              alert('Preferred visit time cannot be in the past.');
               return;
             }
 
@@ -258,6 +321,7 @@
                 imageUrls: imageUrls,
                 status: "Pending",
                 responseTime: "Not yet responded",
+                preferredVisitTime: new Date(preferredVisitTime),
                 timestamp: serverTimestamp()
               });
 
@@ -268,6 +332,7 @@
               otherComment.value = "";
               imageUpload.value = "";
               otherSection.style.display = "none";
+              preferredDateInput.value = "";
 
               loadHistory();
 
@@ -280,9 +345,147 @@
           break;
 
         case 'billing':
-          mainContent.innerHTML = '<h1>Billing and Payments</h1><p>View and pay your bills securely.</p>';
-          break;
+          mainContent.innerHTML = `
+            <div class="payment-tab">
+              <h2>Billing and Payments</h2>
+              <p>Pay your monthly dues securely using PayPal.</p>
 
+              <div id="invoiceSection" style="margin-top:20px;">
+                <h3>Your Current Invoice</h3>
+                <p id="invoiceDetails">Loading your invoice...</p>
+                <div id="paypal-button-container" style="margin-top:20px;"></div>
+              </div>
+
+              <hr style="margin:25px 0;">
+
+              <h3>Payment History</h3>
+              <div id="paymentHistory" style="max-height:300px; overflow-y:auto; font-size:14px;">
+                <p>Loading your payment history...</p>
+              </div>
+            </div>
+          `;
+
+          const invoiceDetails = document.getElementById('invoiceDetails');
+          const paymentHistory = document.getElementById('paymentHistory');
+          const paypalContainer = document.getElementById('paypal-button-container');
+
+          // Load tenant invoice
+          async function loadInvoice() {
+            const tenantEmail = await getCurrentUserEmail();
+            invoiceDetails.innerHTML = `
+              <strong>Tenant:</strong> ${tenantEmail}<br>
+              <strong>Amount Due:</strong> ₱2,500<br>
+              <strong>Due Date:</strong> 25th of this month
+            `;
+          }
+
+          // Load tenant payment history from Firestore
+          async function loadPaymentHistory() {
+            paymentHistory.innerHTML = '<p>Loading your payment history...</p>';
+            const tenantEmail = await getCurrentUserEmail();
+
+            try {
+              const q = query(
+                collection(db, "payments"),
+                where("tenantEmail", "==", tenantEmail),
+                orderBy("timestamp", "desc")
+              );
+              const snapshot = await getDocs(q);
+
+              if (snapshot.empty) {
+                paymentHistory.innerHTML = '<p>No payment records found.</p>';
+                return;
+              }
+
+              paymentHistory.innerHTML = '';
+              snapshot.forEach(doc => {
+                const d = doc.data();
+                const time = d.timestamp ? d.timestamp.toDate().toLocaleString() : "N/A";
+                const div = document.createElement('div');
+                div.style.borderBottom = "1px solid #ccc";
+                div.style.padding = "8px 0";
+                div.innerHTML = `
+                  <strong>Invoice ID:</strong> ${d.invoiceId}<br>
+                  <strong>Amount:</strong> ₱${d.amount}<br>
+                  <strong>Status:</strong> ${d.status}<br>
+                  <strong>Date:</strong> ${time}<br>
+                  <strong>Payment Method:</strong> ${d.method}
+                `;
+                paymentHistory.appendChild(div);
+              });
+            } catch (error) {
+              paymentHistory.innerHTML = `<p style="color:red;">Error loading history: ${error.message}</p>`;
+            }
+          }
+
+          // Initialize PayPal Live Buttons
+          async function setupPayPal() {
+            const tenantEmail = await getCurrentUserEmail();
+            const amount = 2500;
+            const invoiceId = "INV-" + Date.now();
+
+            paypal.Buttons({
+              style: {
+                color: "gold",
+                shape: "rect",
+                label: "pay",
+                height: 40
+              },
+
+              // Create order
+              createOrder: function(data, actions) {
+                return actions.order.create({
+                  purchase_units: [{
+                    reference_id: invoiceId,
+                    description: "Monthly Dues Payment - Solano Hills",
+                    amount: {
+                      currency_code: "PHP",
+                      value: amount.toString()
+                    }
+                  }]
+                });
+              },
+
+              // On successful approval
+              onApprove: async function(data, actions) {
+                const order = await actions.order.capture();
+                console.log("Payment successful:", order);
+
+                // Store payment record in Firestore
+                await addDoc(collection(db, "payments"), {
+                  tenantEmail,
+                  invoiceId,
+                  amount,
+                  method: "PayPal",
+                  status: "Paid",
+                  transactionId: order.id,
+                  payerName: order.payer.name.given_name + " " + order.payer.name.surname,
+                  payerEmail: order.payer.email_address,
+                  timestamp: serverTimestamp()
+                });
+
+                alert("✅ Payment successful! Thank you, " + order.payer.name.given_name + ".");
+                loadPaymentHistory();
+              },
+
+              // On cancel
+              onCancel: function() {
+                alert("⚠️ Payment cancelled by user.");
+              },
+
+              // On error
+              onError: function(err) {
+                console.error("PayPal error:", err);
+                alert("❌ Payment failed. Please try again later.");
+              }
+            }).render(paypalContainer);
+          }
+
+          loadInvoice();
+          loadPaymentHistory();
+          setupPayPal();
+          break;
+  
         case 'feedback':
           loadFeedbackForm();
           break;
@@ -297,19 +500,47 @@
         <div class="feedback-container">
           <h2>Send Feedback to Admin</h2>
           <form id="feedbackForm">
-            <textarea id="feedbackText" placeholder="Write your feedback..." required style="width:100%;height:120px;padding:10px;border-radius:8px;"></textarea>
-            <br/>
-            <button id="sendFeedbackBtn" type="submit" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px;">Send Feedback</button>
+            <label for="question1">1. How satisfied are you with our services?</label>
+            <div id="rating" style="font-size: 2rem; margin: 8px 0; user-select:none;">
+              <span data-value="1" style="cursor:pointer;">⭐️</span>
+              <span data-value="2" style="cursor:pointer;">⭐️</span>
+              <span data-value="3" style="cursor:pointer;">⭐️</span>
+              <span data-value="4" style="cursor:pointer;">⭐️</span>
+              <span data-value="5" style="cursor:pointer;">⭐️</span>
+            </div>
+            <input type="hidden" id="ratingValue" name="ratingValue" required />
+
+            <label for="question2" style="margin-top:15px;">2. What do you like about our community?</label>
+            <textarea id="question2" name="question2" placeholder="Your answer..." style="width:100%; height:80px; padding:8px; border-radius:6px; border:1px solid #ccc;" required></textarea>
+
+            <label for="question3" style="margin-top:15px;">3. What can we improve?</label>
+            <textarea id="question3" name="question3" placeholder="Your suggestions..." style="width:100%; height:80px; padding:8px; border-radius:6px; border:1px solid #ccc;" required></textarea>
+
+            <button id="sendFeedbackBtn" type="submit" style="margin-top:15px; padding:10px 20px; background:#8d6c39; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px;">Send Feedback</button>
           </form>
-          <p id="statusMessage" style="margin-top:10px;color:green;"></p>
+          <p id="statusMessage" style="margin-top:10px; color:green;"></p>
         </div>
       `;
 
       const form = document.getElementById("feedbackForm");
-      const feedbackText = document.getElementById("feedbackText");
+      const ratingStars = document.querySelectorAll("#rating span");
+      const ratingValueInput = document.getElementById("ratingValue");
       const statusMessage = document.getElementById("statusMessage");
       const sendBtn = document.getElementById("sendFeedbackBtn");
 
+      // Rating star click handler
+      ratingStars.forEach(star => {
+        star.addEventListener("click", () => {
+          const val = star.getAttribute("data-value");
+          ratingValueInput.value = val;
+          // Highlight selected stars
+          ratingStars.forEach(s => {
+            s.style.opacity = s.getAttribute("data-value") <= val ? "1" : "0.3";
+          });
+        });
+      });
+
+      // Disable send button during cooldown
       function disableButtonForCooldown() {
         sendBtn.disabled = true;
         sendBtn.style.background = "gray";
@@ -348,6 +579,13 @@
         } else {
           form.addEventListener("submit", async (e) => {
             e.preventDefault();
+
+            // Validate rating selected
+            if (!ratingValueInput.value) {
+              alert("Please select a rating.");
+              return;
+            }
+
             disableButtonForCooldown();
             statusMessage.style.color = "gray";
             statusMessage.textContent = "Sending feedback...";
@@ -355,15 +593,21 @@
             try {
               await addDoc(collection(db, "feedback"), {
                 tenantEmail: user.email,
-                message: feedbackText.value,
+                rating: Number(ratingValueInput.value),
+                question2: form.question2.value.trim(),
+                question3: form.question3.value.trim(),
                 timestamp: serverTimestamp()
               });
 
               statusMessage.style.color = "green";
               statusMessage.textContent = "Feedback sent successfully!";
-              feedbackText.value = "";
 
-              const cooldownTime = Date.now() + 60000;
+              // Reset form
+              form.reset();
+              ratingStars.forEach(s => s.style.opacity = "1");
+              ratingValueInput.value = "";
+
+              const cooldownTime = Date.now() + 60000; // 1 minute cooldown
               localStorage.setItem("feedbackCooldownEnd", cooldownTime);
 
               let countdown = setInterval(() => {
@@ -388,6 +632,7 @@
         }
       });
     }
+
 
     function updateGreeting() {
       onAuthStateChanged(auth, (user) => {
