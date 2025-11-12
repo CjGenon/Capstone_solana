@@ -64,8 +64,10 @@
     function loadContent(section) {
       const area = document.getElementById('mainContent');
       document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-      try { if (event && event.target) event.target.classList.add('active'); } catch(e){}
-
+      try {
+        if (event && event.target) event.target.classList.add('active');
+      } catch(e) {}
+            //<==============dashboard===========>
       switch (section) {
         case "dashboard":
           area.innerHTML = `
@@ -143,11 +145,95 @@
             generateCalendar();
           })();
           break;
-
+          //<==============payment tab===========>
         case 'Payment Received':
-          area.innerHTML = '<h1>Payments Received</h1><p>View Payments of Tenants</p>';
+          area.innerHTML = `
+            <h1>Payments Received</h1>
+            <p>Real-time list of tenant payments (PayPal & Cash-on-Hand).</p>
+
+            <div class="payment-controls" style="margin-bottom:15px;">
+              <input type="text" id="paymentSearch" placeholder="Search by tenant email..." 
+                style="padding:8px;width:250px;border:1px solid #ccc;border-radius:6px;">
+            </div>
+
+            <div id="paypalSection">
+              <h2>💳 PayPal Payment History</h2>
+              <div id="paypalList">Loading PayPal payments...</div>
+            </div>
+
+            <hr style="margin:25px 0;">
+
+            <div id="cashSection">
+              <h2>💵 Cash-on-Hand Payments</h2>
+              <div id="cashList">Loading cash payments...</div>
+            </div>
+          `;
+
+          const paypalList = document.getElementById("paypalList");
+          const cashList = document.getElementById("cashList");
+          const searchInput = document.getElementById("paymentSearch");
+
+          function renderPayments(snapshot) {
+            paypalList.innerHTML = "";
+            cashList.innerHTML = "";
+
+            if (snapshot.empty) {
+              paypalList.innerHTML = "<p>No PayPal payments found.</p>";
+              cashList.innerHTML = "<p>No Cash-on-Hand payments found.</p>";
+              return;
+            }
+
+            const searchValue = searchInput.value.toLowerCase();
+            let paypalHTML = "";
+            let cashHTML = "";
+
+            snapshot.forEach(docSnap => {
+              const data = docSnap.data();
+              if (!data) return;
+
+              const tenantEmail = data.tenantEmail?.toLowerCase() || "";
+              if (searchValue && !tenantEmail.includes(searchValue)) return;
+
+              const date = data.timestamp?.toDate ? 
+                data.timestamp.toDate().toLocaleString() : "Unknown date";
+              const amount = data.amount ? `₱${Number(data.amount).toLocaleString()}` : "₱0.00";
+              const paymentId = data.transactionId || docSnap.id;
+              const method = data.paymentMethod || "Unknown";
+
+              const paymentCard = `
+                <div style="border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:10px;">
+                  <p><strong>Tenant:</strong> ${data.tenantEmail || "Unknown Tenant"}</p>
+                  <p><strong>Amount:</strong> ${amount}</p>
+                  <p><strong>Payment Method:</strong> ${method}</p>
+                  <p><strong>Transaction ID:</strong> ${paymentId}</p>
+                  <p><strong>Date:</strong> ${date}</p>
+                </div>
+              `;
+
+              if (method.toLowerCase() === "paypal") paypalHTML += paymentCard;
+              else if (method.toLowerCase().includes("cash")) cashHTML += paymentCard;
+            });
+
+            paypalList.innerHTML = paypalHTML || "<p>No PayPal payments found.</p>";
+            cashList.innerHTML = cashHTML || "<p>No Cash-on-Hand payments found.</p>";
+          }
+
+          // Listen for real-time changes in payments collection
+          db.collection("payments")
+            .orderBy("timestamp", "desc")
+            .onSnapshot(renderPayments, error => {
+              paypalList.innerHTML = `<p style="color:red;">Error loading payments: ${error.message}</p>`;
+              cashList.innerHTML = `<p style="color:red;">Error loading payments: ${error.message}</p>`;
+            });
+
+          // Re-filter as user types
+          searchInput.addEventListener("input", async () => {
+            const snapshot = await db.collection("payments").orderBy("timestamp", "desc").get();
+            renderPayments(snapshot);
+          });
           break;
 
+          //<==============mainetnnacw tab===========>
         case 'Maintenance Requests':
           area.innerHTML = `
             <h1>Maintenance Requests</h1>
@@ -157,133 +243,182 @@
             </div>`;
 
           async function loadMaintenanceRequests() {
-            const maintenanceList = document.getElementById('maintenanceList');
+          const maintenanceList = document.getElementById('maintenanceList');
 
-            db.collection("maintenanceRequests")
-              .orderBy("timestamp", "desc")
-              .onSnapshot(snapshot => {
-                if (snapshot.empty) {
-                  maintenanceList.innerHTML = "<p>No maintenance requests found.</p>";
-                  return;
+          db.collection("maintenanceRequests")
+            .orderBy("timestamp", "desc")
+            .onSnapshot(snapshot => {
+              if (snapshot.empty) {
+                maintenanceList.innerHTML = "<p>No maintenance requests found.</p>";
+                return;
+              }
+              maintenanceList.innerHTML = "";
+              snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+
+                // Format date helper: 12-hour with AM/PM
+                function formatDateTimeAMPM(date) {
+                  if (!date) return "N/A";
+                  let d = date.toDate ? date.toDate() : date;
+                  let hours = d.getHours();
+                  const minutes = d.getMinutes().toString().padStart(2, "0");
+                  const ampm = hours >= 12 ? "PM" : "AM";
+                  hours = hours % 12;
+                  hours = hours ? hours : 12; // the hour '0' should be '12'
+                  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+                  const day = d.getDate().toString().padStart(2, "0");
+                  const year = d.getFullYear();
+                  return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
                 }
-                maintenanceList.innerHTML = "";
-                snapshot.forEach(docSnap => {
-                  const data = docSnap.data();
-                  const id = docSnap.id;
 
-                  const card = document.createElement("div");
-                  card.className = "maintenance-card";
-                  card.style.border = "1px solid #ccc";
-                  card.style.padding = "10px";
-                  card.style.marginBottom = "10px";
+                // Container card
+                const card = document.createElement("div");
+                card.className = "maintenance-card";
+                card.style.border = "1px solid #ccc";
+                card.style.padding = "15px";
+                card.style.marginBottom = "15px";
+                card.style.borderRadius = "8px";
+                // card.style.backgroundColor = "#fafafa";
 
-                  const statusOptions = ["Pending", "Complete"];
-                  const statusSelect = document.createElement("select");
-                  statusOptions.forEach(option => {
-                    const opt = document.createElement("option");
-                    opt.value = option;
-                    opt.textContent = option;
-                    if (data.status === option) opt.selected = true;
-                    statusSelect.appendChild(opt);
-                  });
-                  statusSelect.style.marginRight = "10px";
-
-                  const personnelInput = document.createElement("input");
-                  personnelInput.type = "text";
-                  personnelInput.placeholder = "Assign maintenance personnel";
-                  personnelInput.value = data.maintenanceName || "";
-                  personnelInput.style.marginRight = "10px";
-
-                  const updateBtn = document.createElement("button");
-                  updateBtn.textContent = "Update";
-                  updateBtn.style.background = "#8d6c39";
-                  updateBtn.style.color = "white";
-                  updateBtn.style.border = "none";
-                  updateBtn.style.borderRadius = "6px";
-                  updateBtn.style.padding = "6px 12px";
-                  updateBtn.style.cursor = "pointer";
-                  updateBtn.style.marginRight = "10px";
-
-                  if (data.status === "Complete") {
-                    statusSelect.disabled = true;
-                    personnelInput.disabled = true;
-                    updateBtn.disabled = true;
-                    statusSelect.style.backgroundColor = "#e0e0e0";
-                    personnelInput.style.backgroundColor = "#e0e0e0";
-                    updateBtn.style.backgroundColor = "#aaa";
-                    updateBtn.style.cursor = "not-allowed";
-                  }
-
-                  updateBtn.addEventListener("click", async () => {
-                    try {
-                      await db.collection("maintenanceRequests").doc(id).update({
-                        status: statusSelect.value,
-                        maintenanceName: personnelInput.value.trim(),
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                      });
-                      alert("Request updated successfully!");
-                    } catch (error) {
-                      alert("Error updating request: " + error.message);
-                    }
-                  });
-
-                  const respondBtn = document.createElement("button");
-                  respondBtn.textContent = "Respond";
-                  respondBtn.style.background = "#4a90e2";
-                  respondBtn.style.color = "white";
-                  respondBtn.style.border = "none";
-                  respondBtn.style.borderRadius = "6px";
-                  respondBtn.style.padding = "6px 12px";
-                  respondBtn.style.cursor = "pointer";
-
-                  respondBtn.addEventListener("click", async () => {
-                    const responseMessage = prompt("Enter your response message to the tenant:");
-                    if (responseMessage && responseMessage.trim() !== "") {
-                      try {
-                        const requestDocRef = db.collection("maintenanceRequests").doc(id);
-                        await requestDocRef.collection("responses").add({
-                          adminEmail: auth.currentUser.email,
-                          message: responseMessage.trim(),
-                          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        await requestDocRef.update({
-                          responseTime: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        alert("Response sent successfully!");
-                      } catch (error) {
-                        alert("Failed to send response: " + error.message);
-                      }
-                    }
-                  });
-
-                  let attachmentHTML = "";
-                  if (data.imageUrl) {
-                    attachmentHTML = `<div style="margin-top:10px;">
-                      <strong>Attachment:</strong><br/>
-                      <img src="${data.imageUrl}" alt="Attachment" style="max-width:100%; border-radius:8px;" />
-                    </div>`;
-                  }
-
-                  card.innerHTML = `
-                    <h3>${data.problem || 'Unknown Issue'}</h3>
-                    <p><strong>Tenant:</strong> ${data.tenantEmail || 'Unknown Tenant'}</p>
-                    <p><strong>Details:</strong> ${data.comment || 'No additional details.'}</p>
-                    <p><strong>Submitted:</strong> ${data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : 'Unknown time'}</p>
-                  ` + attachmentHTML;
-
-                  card.appendChild(statusSelect);
-                  card.appendChild(personnelInput);
-                  card.appendChild(updateBtn);
-                  card.appendChild(respondBtn);
-                  maintenanceList.appendChild(card);
+                // Status dropdown
+                const statusOptions = ["Pending", "Complete"];
+                const statusSelect = document.createElement("select");
+                statusOptions.forEach(option => {
+                  const opt = document.createElement("option");
+                  opt.value = option;
+                  opt.textContent = option;
+                  if (data.status === option) opt.selected = true;
+                  statusSelect.appendChild(opt);
                 });
-              }, error => {
-                maintenanceList.innerHTML = `<p style="color:red;">Error loading requests: ${error.message}</p>`;
+                statusSelect.style.marginRight = "10px";
+
+                // Personnel assignment input
+                const personnelInput = document.createElement("input");
+                personnelInput.type = "text";
+                personnelInput.placeholder = "Assign maintenance personnel";
+                personnelInput.value = data.maintenanceName || "";
+                personnelInput.style.marginRight = "10px";
+
+                // Update button
+                const updateBtn = document.createElement("button");
+                updateBtn.textContent = "Update";
+                updateBtn.style.background = "#8d6c39";
+                updateBtn.style.color = "white";
+                updateBtn.style.border = "none";
+                updateBtn.style.borderRadius = "6px";
+                updateBtn.style.padding = "6px 12px";
+                updateBtn.style.cursor = "pointer";
+                updateBtn.style.marginRight = "10px";
+
+                if (data.status === "Complete") {
+                  statusSelect.disabled = true;
+                  personnelInput.disabled = true;
+                  updateBtn.disabled = true;
+                  statusSelect.style.backgroundColor = "#e0e0e0";
+                  personnelInput.style.backgroundColor = "#e0e0e0";
+                  updateBtn.style.backgroundColor = "#aaa";
+                  updateBtn.style.cursor = "not-allowed";
+                }
+
+                updateBtn.addEventListener("click", async () => {
+                  try {
+                    await db.collection("maintenanceRequests").doc(id).update({
+                      status: statusSelect.value,
+                      maintenanceName: personnelInput.value.trim(),
+                      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    alert("Request updated successfully!");
+                  } catch (error) {
+                    alert("Error updating request: " + error.message);
+                  }
+                });
+
+                // Respond button
+                const respondBtn = document.createElement("button");
+                respondBtn.textContent = "Respond";
+                respondBtn.style.background = "#4a90e2";
+                respondBtn.style.color = "white";
+                respondBtn.style.border = "none";
+                respondBtn.style.borderRadius = "6px";
+                respondBtn.style.padding = "6px 12px";
+                respondBtn.style.cursor = "pointer";
+
+                respondBtn.addEventListener("click", async () => {
+                  const responseMessage = prompt("Enter your response message to the tenant:");
+                  if (responseMessage && responseMessage.trim() !== "") {
+                    try {
+                      const requestDocRef = db.collection("maintenanceRequests").doc(id);
+                      await requestDocRef.collection("responses").add({
+                        adminEmail: auth.currentUser.email,
+                        message: responseMessage.trim(),
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                      });
+                      await requestDocRef.update({
+                        responseTime: firebase.firestore.FieldValue.serverTimestamp()
+                      });
+                      alert("Response sent successfully!");
+                    } catch (error) {
+                      alert("Failed to send response: " + error.message);
+                    }
+                  }
+                });
+
+                // Delete button
+                const deleteBtn = document.createElement("button");
+                deleteBtn.textContent = "Delete";
+                deleteBtn.className = "btn btn-danger";
+                deleteBtn.style.marginLeft = "8px";
+                deleteBtn.style.cursor = "pointer";
+                deleteBtn.addEventListener("click", async () => {
+                  if (!confirm("Delete this maintenance request? This action cannot be undone.")) return;
+                  try {
+                    await db.collection("maintenanceRequests").doc(id).delete();
+                    alert("Maintenance request deleted.");
+                  } catch (error) {
+                    alert("Failed to delete: " + error.message);
+                  }
+                });
+
+                // Images (support multiple)
+                let imagesHTML = "";
+                if (data.imageUrls && Array.isArray(data.imageUrls) && data.imageUrls.length > 0) {
+                  imagesHTML += `<div style="margin-top:10px;"><strong>Attachments:</strong><br/>`;
+                  data.imageUrls.forEach(url => {
+                    imagesHTML += `<img src="${url}" alt="Attachment" style="max-width:100px; margin-right:10px; border-radius:6px; margin-top:5px;" />`;
+                  });
+                  imagesHTML += "</div>";
+                }
+
+                // Compose innerHTML with all details
+                card.innerHTML = `
+                  <h3 style="margin-bottom:8px;">${data.problem || 'Unknown Issue'}</h3>
+                  <p><strong>Tenant:</strong> ${data.tenantEmail || 'Unknown Tenant'}</p>
+                  <p><strong>Details:</strong> ${data.comment || 'No additional details.'}</p>
+                  <p><strong>Preferred Visit Time:</strong> ${formatDateTimeAMPM(data.preferredVisitTime)}</p>
+                  <p><strong>Status:</strong> ${data.status || 'Pending'}</p>
+                  <p><strong>Maintenance Personnel:</strong> ${data.maintenanceName || 'Not assigned'}</p>
+                  <p><strong>Submitted:</strong> ${formatDateTimeAMPM(data.timestamp)}</p>
+                  ${imagesHTML}
+                `;
+
+                // Append controls
+                card.appendChild(statusSelect);
+                card.appendChild(personnelInput);
+                card.appendChild(updateBtn);
+                card.appendChild(respondBtn);
+                card.appendChild(deleteBtn);
+
+                maintenanceList.appendChild(card);
               });
-          }
+            }, error => {
+              maintenanceList.innerHTML = `<p style="color:red;">Error loading requests: ${error.message}</p>`;
+            });
+        }
+
           loadMaintenanceRequests();
           break;
-
+          //<==============accont creation===========>
         case 'Tenant Account Creation':
           area.innerHTML = `
             <h1>Create New Tenant Account</h1>
@@ -324,7 +459,7 @@
             });
           }, 100);
           break;
-
+          //<==============feedback atb===========>
         case 'Feedback Received':
           area.innerHTML = `
             <h1>Feedback from Tenants</h1>
@@ -398,12 +533,17 @@
           const content = document.createElement('div');
           content.className = 'feedback-item-content';
 
-          const timeText = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() :
-            (data.timestamp && data.timestamp.seconds ? new Date(data.timestamp.seconds * 1000).toLocaleString() : 'Unknown time');
+          const timeText = data.timestamp?.toDate
+            ? data.timestamp.toDate().toLocaleString()
+            : (data.timestamp && data.timestamp.seconds ? new Date(data.timestamp.seconds * 1000).toLocaleString() : 'Unknown time');
+
+          const stars = "⭐".repeat(data.rating || 0);
 
           content.innerHTML = `
             <strong>From:</strong> ${data.tenantEmail || "Unknown"}<br/>
-            <strong>Message:</strong> ${escapeHtml(data.message || "No message")}<br/>
+            <strong>Rating:</strong> ${stars}<br/>
+            <strong>Question 2:</strong> ${escapeHtml(data.question2 || "No answer")}<br/>
+            <strong>Question 3:</strong> ${escapeHtml(data.question3 || "No answer")}<br/>
             <small style="color:#666">${timeText}</small>`;
 
           const perDeleteBtn = document.createElement('button');
