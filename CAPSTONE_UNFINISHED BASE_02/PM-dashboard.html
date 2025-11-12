@@ -9,12 +9,12 @@
   <!-- ======================== SIDEBAR ======================== -->
   <div class="sidebar">
     <div class="logo">
-      <img src="SHR-LOGO-CORE-WHITE-r2s9u89e4bid2abizvtsncwzc48kzhlzz6fuhv7oko.webp" alt="Solano Logo">
+      <img src="SHR-LOGO-CORE-WHITE-r2s9u89e4bid2abizvtsncwzc48kzhlzz6fuhv7oko.webp" alt="Solano Logo" />
     </div>
     <nav>
       <ul>
         <li><a href="#" onclick="loadContent(event, 'dashboard')">Dashboard</a></li>
-        <li><a href="#" id="showInboxBtn">Inbox</a></li>
+        <li><a href="#" id="showInboxBtn" onclick="loadContent(event, 'inbox')">Inbox</a></li>
         <li><a href="#" onclick="loadContent(event, 'document')">Document</a></li>
         <li><a href="LogIn.html">Logout</a></li>
       </ul>
@@ -32,8 +32,8 @@
   <!-- ======================== EMAILJS SDK ======================== -->
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
   <script>
-    (function() {
-      emailjs.init("avvdJIIs04H8nGyu_"); 
+    (function () {
+      emailjs.init("avvdJIIs04H8nGyu_");
     })();
   </script>
 
@@ -42,6 +42,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
     import { getFirestore, collection, query, orderBy, getDocs, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+    import { deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
 
     // ================= FIREBASE CONFIG =================
     const firebaseConfig = {
@@ -57,212 +58,347 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const showInboxBtn = document.getElementById("showInboxBtn");
     const mainContent = document.getElementById("mainContent");
 
     // ================= CONTENT LOADER =================
-    window.loadContent = function(event, section) {
-      event.preventDefault();
+    window.loadContent = function (event, section) {
+      if(event) event.preventDefault();
 
-      document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-      if (event.target.tagName === 'A') {
-        event.target.classList.add('active');
-      }
+      // Remove active class and add to clicked
+      document.querySelectorAll(".sidebar nav ul li a").forEach(link => link.classList.remove("active"));
+      if (event?.target?.tagName === "A") event.target.classList.add("active");
 
-      mainContent.innerHTML = '';
+      mainContent.innerHTML = "";
 
       switch (section) {
-        case 'dashboard':
+        /* ================= DASHBOARD ================= */
+        case "dashboard":
           mainContent.innerHTML = `
             <h1 id="Greeting1">Dashboard</h1>
-            <p>This is your dashboard overview.</p>
+            <div class="dashboard-container">
+              
+              <!-- ======== LEFT: WELCOME SLIDER ======== -->
+              <div class="welcome-slider">
+                <div class="slide fade"><img src="1Entertainment room.jpg" alt="Welcome Slide 1"></div>
+                <div class="slide fade"><img src="1Fitness Gym.jpg" alt="Welcome Slide 2"></div>
+                <div class="slide fade"><img src="1Roof Garden.jpg" alt="Welcome Slide 3"></div>
+                <button class="prev" id="sliderPrev">&#10094;</button>
+                <button class="next" id="sliderNext">&#10095;</button>
+              </div>
+
+              <!-- ======== RIGHT: CALENDAR + INBOX ======== -->
+              <div class="right-side">
+                <div class="calendar-card">
+                  <h3>📅 Calendar</h3>
+                  <div id="calendar"></div>
+                </div>
+
+                <div class="inbox-card">
+                  <h3>📩 Inbox Summary</h3>
+                  <p>Check and reply to tenant feedback or messages.</p>
+                  <button id="goToInboxBtn">Go to Inbox</button>
+                </div>
+              </div>
+            </div>
           `;
+
+          // Image slider logic
+          (function () {
+            let slideIndexLocal = 1;
+            const slides = () => document.querySelectorAll(".welcome-slider .slide");
+
+            function showSlidesLocal(n) {
+              const nodeList = slides();
+              if (!nodeList || nodeList.length === 0) return;
+              if (n > nodeList.length) slideIndexLocal = 1;
+              if (n < 1) slideIndexLocal = nodeList.length;
+              nodeList.forEach(s => (s.style.display = "none"));
+              nodeList[slideIndexLocal - 1].style.display = "block";
+            }
+
+            showSlidesLocal(slideIndexLocal);
+
+            document.getElementById("sliderPrev").addEventListener("click", () => showSlidesLocal(--slideIndexLocal));
+            document.getElementById("sliderNext").addEventListener("click", () => showSlidesLocal(++slideIndexLocal));
+
+            const sliderInterval = setInterval(() => showSlidesLocal(++slideIndexLocal), 5000);
+            const sliderEl = document.querySelector(".welcome-slider");
+            if (sliderEl) sliderEl.addEventListener("mouseenter", () => clearInterval(sliderInterval));
+          })();
+
+          // Calendar logic
+          (function () {
+            function generateCalendar() {
+              const calendar = document.getElementById("calendar");
+              if (!calendar) return;
+
+              const today = new Date();
+              const monthName = today.toLocaleString("default", { month: "long" });
+              const year = today.getFullYear();
+              const firstDay = new Date(year, today.getMonth(), 1);
+              const lastDay = new Date(year, today.getMonth() + 1, 0);
+              const startDay = firstDay.getDay();
+
+              let html = "<table class='cal-table'>";
+              html += "<tr><th class='cal-header' colspan='7'>" + monthName + " " + year + "</th></tr>";
+              html += "<tr class='cal-weekdays'><th>S</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th></tr><tr>";
+
+              for (let i = 0; i < startDay; i++) html += "<td class='cal-empty'></td>";
+
+              for (let day = 1; day <= lastDay.getDate(); day++) {
+                const isToday = day === today.getDate();
+                html += "<td" + (isToday ? " class='today'" : "") + ">" + day + "</td>";
+                if ((day + startDay) % 7 === 0 && day !== lastDay.getDate()) html += "</tr><tr>";
+              }
+
+              html += "</tr></table>";
+              calendar.innerHTML = html;
+            }
+            generateCalendar();
+          })();
+
+          // Hook Inbox summary button on dashboard to inbox tab
+          (function () {
+            const goBtn = document.getElementById("goToInboxBtn");
+            if (goBtn) {
+              goBtn.addEventListener("click", () => {
+                loadContent(null, "inbox");
+                // Also update sidebar active class
+                document.querySelectorAll(".sidebar nav ul li a").forEach(link => link.classList.remove("active"));
+                document.querySelector("#showInboxBtn").classList.add("active");
+              });
+            }
+          })();
+
           break;
 
-        case 'document':
+        /* ================= INBOX ================= */
+        case "inbox":
           mainContent.innerHTML = `
-            <h1>Tenant Document Upload</h1>
-            <form id="tenantDocForm" enctype="multipart/form-data">
+            <h3>Inbox Messages</h3>
+            <div id="unrepliedSection">
+              <h4>Unreplied Messages</h4>
+              <div id="unrepliedList">Loading...</div>
+            </div>
 
-              <label>Inquirer's Name:</label><br>
-              <input type="text" name="tenant_name" id="tenantName" placeholder="Enter tenant name" required><br><br>
+            <button id="toggleRepliedBtn" style="margin-top:20px; background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
+              Show Replied Messages ▼
+            </button>
 
-              <label>Attachment 1:</label><br>
-              <input type="file" name="file1" id="file1" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 2:</label><br>
-              <input type="file" name="file2" id="file2" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 3:</label><br>
-              <input type="file" name="file3" id="file3" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 4:</label><br>
-              <input type="file" name="file4" id="file4" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 5:</label><br>
-              <input type="file" name="file5" id="file5" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 6:</label><br>
-              <input type="file" name="file6" id="file6" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 7:</label><br>
-              <input type="file" name="file7" id="file7" accept=".pdf,.doc,.docx,.jpg,.png" required><br>
-
-              <label>Attachment 8:</label><br>
-              <input type="file" name="file8" id="file8" accept=".pdf,.doc,.docx,.jpg,.png" required><br><br>
-
-              <button type="submit" style="background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
-                Submit Document
-              </button>
-            </form>
-
-            <div id="uploadStatus" style="margin-top:10px;"></div>
-            <h3 style="margin-top:20px;">Recent Submissions</h3>
-            <ul id="recentUploads"></ul>
+            <div id="repliedSection" style="display:none; margin-top:10px;">
+              <h4>Replied Messages</h4>
+              <div id="repliedList"></div>
+            </div>
           `;
 
-          const form = document.getElementById("tenantDocForm");
-          const status = document.getElementById("uploadStatus");
-          const list = document.getElementById("recentUploads");
+          const unrepliedList = document.getElementById("unrepliedList");
+          const repliedList = document.getElementById("repliedList");
+          const repliedSection = document.getElementById("repliedSection");
+          const toggleBtn = document.getElementById("toggleRepliedBtn");
 
+          toggleBtn.addEventListener("click", () => {
+            const isVisible = repliedSection.style.display === "block";
+            repliedSection.style.display = isVisible ? "none" : "block";
+            toggleBtn.textContent = isVisible ? "Show Replied Messages ▼" : "Hide Replied Messages ▲";
+          });
+
+          // Load messages from Firestore
+          (async () => {
+            try {
+              const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+              const snapshot = await getDocs(q);
+
+              if (snapshot.empty) {
+                unrepliedList.innerHTML = "<p>No messages yet.</p>";
+                return;
+              }
+
+              unrepliedList.innerHTML = "";
+              repliedList.innerHTML = "";
+
+              snapshot.forEach(docItem => {
+                const data = docItem.data();
+                const messageEl = document.createElement("div");
+                messageEl.className = "message";
+
+                if (data.replied) {
+                  // Replied message with Delete button
+                  messageEl.innerHTML = `
+                    <strong>Name:</strong> ${data.name}<br/>
+                    <strong>Email:</strong> ${data.email}<br/>
+                    <strong>Number:</strong> ${data.number}<br/>
+                    <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
+                    <strong>Message:</strong> ${data.message}<br/>
+                    <em style="color:green;">(Already Replied)</em><br/>
+                    <button class="deleteBtn" data-id="${docItem.id}" 
+                      style="margin-top:5px; background-color:#d9534f; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">
+                      Delete
+                    </button>
+                  `;
+                  repliedList.appendChild(messageEl);
+                } else {
+                  // Unreplied message with Reply button
+                  messageEl.innerHTML = `
+                    <strong>Name:</strong> ${data.name}<br/>
+                    <strong>Email:</strong> ${data.email}<br/>
+                    <strong>Number:</strong> ${data.number}<br/>
+                    <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
+                    <strong>Message:</strong> ${data.message}<br/>
+                    <button onclick="showReplyForm('${data.email}', '${docItem.id}', '${data.name}')">Reply</button>
+                    <div id="reply-${docItem.id}" style="display:none; margin-top:10px;">
+                      <textarea id="replyText-${docItem.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
+                      <button onclick="sendReply('${data.email}', '${docItem.id}', '${data.name}')">Send Reply</button>
+                    </div>
+                  `;
+                  unrepliedList.appendChild(messageEl);
+                }
+              });
+
+              // Attach delete event listeners
+              document.querySelectorAll(".deleteBtn").forEach(button => {
+                button.addEventListener("click", async (event) => {
+                  const idToDelete = event.target.getAttribute("data-id");
+                  if (confirm("Are you sure you want to delete this message?")) {
+                    try {
+                      await deleteDoc(doc(db, "messages", idToDelete));
+                      alert("Message deleted successfully.");
+                      loadContent(null, "inbox"); // refresh inbox
+                    } catch (error) {
+                      alert("Error deleting message: " + error.message);
+                    }
+                  }
+                });
+              });
+
+            } catch (error) {
+              unrepliedList.innerHTML = "Error loading messages: " + error.message;
+            }
+          })();
+
+          break;
+
+        /* ================= DOCUMENT ================= */
+        case "document":
+          mainContent.innerHTML = `
+            <h1>Upload Client Documents</h1>
+            <form id="clientDocumentsForm">
+              <label for="clientName"><strong>Client Name:</strong> <span style="color:red">*</span></label><br/>
+              <input type="text" id="clientName" name="clientName" placeholder="Enter client's full name" required style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 20px;" />
+              
+              <p>Please upload the following required documents:</p>
+              
+              <label>
+                1. Valid ID (Government-issued) <span style="color:red">*</span><br/>
+                <input type="file" name="validID" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                2. Proof of Income <span style="color:red">*</span><br/>
+                <input type="file" name="proofOfIncome" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                3. Lease Contract <span style="color:red">*</span><br/>
+                <input type="file" name="leaseContract" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                4. Barangay Clearance <span style="color:red">*</span><br/>
+                <input type="file" name="barangayClearance" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                5. NBI Clearance (optional)<br/>
+                <input type="file" name="nbiClearance" accept="image/*,application/pdf" />
+              </label><br/><br/>
+              
+              <button type="submit">Submit Documents</button>
+              <p id="uploadStatus"></p>
+            </form>
+          `;
+
+          const form = document.getElementById("clientDocumentsForm");
           form.addEventListener("submit", async (e) => {
             e.preventDefault();
-
-            status.style.color = "black";
-            status.textContent = "Uploading and sending...";
-
-            const tenantNameField = document.getElementById("tenantName");
-            if (!tenantNameField.value.trim()) {
-              status.style.color = "red";
-              status.textContent = "Tenant name is required.";
+            const status = document.getElementById("uploadStatus");
+            
+            const clientNameInput = form.elements["clientName"];
+            const clientName = clientNameInput.value.trim();
+            if (!clientName) {
+              alert("Please enter the client's name.");
+              clientNameInput.focus();
               return;
             }
 
-            try {
-              await emailjs.sendForm(
-                "service_rtrzm39",
-                "template_f2fwz7a",
-                form,
-                "avvdJIIs04H8nGyu_"
-              );
-
-              status.style.color = "green";
-              status.textContent = `✅ Documents sent for "${tenantNameField.value}" ✅`;
-
-              const li = document.createElement("li");
-              li.textContent = `${tenantNameField.value} — Sent @ ${new Date().toLocaleString()}`;
-              list.prepend(li);
-
-              form.reset();
-            } catch (error) {
-              status.style.color = "red";
-              status.textContent = "❌ Failed to send: " + error.message;
+            // Check required files
+            const requiredFields = ["validID", "proofOfIncome", "leaseContract", "barangayClearance"];
+            for (const fieldName of requiredFields) {
+              const fileInput = form.elements[fieldName];
+              if (!fileInput.files || fileInput.files.length === 0) {
+                alert(`Please upload the required document: ${fieldName.replace(/([A-Z])/g, " $1")}`);
+                fileInput.focus();
+                return;
+              }
             }
+
+            status.textContent = "Uploading documents...";
+
+            // Example: Upload files sequentially — replace uploadFile with your actual upload logic
+            for (const input of form.elements) {
+              if (input.type === "file" && input.files.length > 0) {
+                const file = input.files[0];
+                status.textContent = `Uploading ${input.name.replace(/([A-Z])/g, " $1")} for ${clientName} - ${file.name}`;
+                try {
+                  await uploadFile(file, clientName, input.name);
+                } catch (err) {
+                  status.textContent = `Failed to upload ${file.name}: ${err.message}`;
+                  return;
+                }
+              }
+            }
+
+            status.textContent = `All documents for ${clientName} uploaded successfully!`;
+            form.reset();
           });
+
+          // Dummy upload function to simulate delay - replace with your actual Firebase Storage or backend upload logic
+          async function uploadFile(file, clientName, docType) {
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve();
+              }, 1000); // Simulate 1 second upload delay per file
+            });
+          }
           break;
 
-
+        /* ================= DEFAULT ================= */
         default:
-          mainContent.innerHTML = '<h1>Welcome</h1><p>Select an option from the sidebar.</p>';
+          mainContent.innerHTML = "<h1>Welcome</h1><p>Select an option from the sidebar.</p>";
       }
     };
 
-    // ================= AUTH + LOAD INBOX =================
-    onAuthStateChanged(auth, async (user) => {
+    // ================= AUTHENTICATION CHECK =================
+    onAuthStateChanged(auth, (user) => {
       if (!user) {
         alert("You're not signed in. Redirecting to login...");
         window.location.href = "index.html";
         return;
       }
+      // Show welcome message
+      const greeting = document.getElementById("Greeting");
+      const nameToShow = user.displayName || user.email;
+      if (greeting) greeting.textContent = `Welcome Back!, ${nameToShow}`;
 
-      showInboxBtn.disabled = false;
-
-      showInboxBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
-
-        document.querySelectorAll('.sidebar nav ul li a').forEach(link => link.classList.remove('active'));
-        showInboxBtn.classList.add('active');
-
-        mainContent.innerHTML = `
-          <h3>Inbox Messages</h3>
-          <div id="unrepliedSection">
-            <h4>Unreplied Messages</h4>
-            <div id="unrepliedList">Loading...</div>
-          </div>
-
-          <button id="toggleRepliedBtn" style="margin-top:20px; background-color:#8d6c39; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
-            Show Replied Messages ▼
-          </button>
-
-          <div id="repliedSection" style="display:none; margin-top:10px;">
-            <h4>Replied Messages</h4>
-            <div id="repliedList"></div>
-          </div>
-        `;
-
-        const unrepliedList = document.getElementById("unrepliedList");
-        const repliedList = document.getElementById("repliedList");
-        const repliedSection = document.getElementById("repliedSection");
-        const toggleBtn = document.getElementById("toggleRepliedBtn");
-
-        toggleBtn.addEventListener("click", () => {
-          const isVisible = repliedSection.style.display === "block";
-          repliedSection.style.display = isVisible ? "none" : "block";
-          toggleBtn.textContent = isVisible ? "Show Replied Messages ▼" : "Hide Replied Messages ▲";
-        });
-
-        try {
-          const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
-          const snapshot = await getDocs(q);
-
-          if (snapshot.empty) {
-            unrepliedList.innerHTML = "<p>No messages yet.</p>";
-            return;
-          }
-
-          unrepliedList.innerHTML = "";
-          repliedList.innerHTML = "";
-
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const messageEl = document.createElement("div");
-            messageEl.className = "message";
-            messageEl.innerHTML = `
-              <strong>Name:</strong> ${data.name}<br/>
-              <strong>Email:</strong> ${data.email}<br/>
-              <strong>Number:</strong> ${data.number}<br/>
-              <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
-              <strong>Message:</strong> ${data.message}<br/>
-              ${
-                data.replied
-                  ? `<em style="color:green;">(Already Replied)</em>`
-                  : `<button onclick="showReplyForm('${data.email}', '${doc.id}', '${data.name}')">Reply</button>
-                    <div id="reply-${doc.id}" style="display:none; margin-top:10px;">
-                      <textarea id="replyText-${doc.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
-                      <button onclick="sendReply('${data.email}', '${doc.id}', '${data.name}')">Send Reply</button>
-                    </div>`
-              }
-            `;
-
-            if (data.replied) {
-              repliedList.appendChild(messageEl);
-            } else {
-              unrepliedList.appendChild(messageEl);
-            }
-          });
-        } catch (error) {
-          unrepliedList.innerHTML = "Error loading messages: " + error.message;
-        }
-      });
+      // Enable sidebar Inbox button (already handled in sidebar click)
     });
 
     // ================= SHOW REPLY FORM =================
-    window.showReplyForm = function(email, id) {
-      document.getElementById(`reply-${id}`).style.display = 'block';
+    window.showReplyForm = function (email, id) {
+      document.getElementById(`reply-${id}`).style.display = "block";
     };
 
     // ================= SEND REPLY VIA EMAILJS =================
-    window.sendReply = async function(toEmail, id, toName) {
+    window.sendReply = async function (toEmail, id, toName) {
       const replyText = document.getElementById(`replyText-${id}`).value.trim();
       if (!replyText) {
         alert("Please type a reply message.");
@@ -290,30 +426,16 @@
           timestamp: new Date()
         });
 
-        document.getElementById(`reply-${id}`).style.display = 'none';
-        document.getElementById(`replyText-${id}`).value = '';
+        document.getElementById(`reply-${id}`).style.display = "none";
+        document.getElementById(`replyText-${id}`).value = "";
 
-        showInboxBtn.click();
+        // Refresh inbox tab
+        loadContent(null, "inbox");
       } catch (error) {
         console.error("EmailJS Error:", error);
         alert("Failed to send reply: " + JSON.stringify(error));
       }
     };
-
-    // ================= GREETING =================
-    function showWelcomeBack() {
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          const greeting = document.getElementById('Greeting');
-          const nameToShow = user.displayName || user.email;
-          if (greeting) {
-            greeting.textContent = `Welcome Back!, ${nameToShow}`;
-          }
-        }
-      });
-    }
-    showWelcomeBack();
   </script>
 </body>
 </html>
-
