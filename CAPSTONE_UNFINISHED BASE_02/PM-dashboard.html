@@ -43,6 +43,8 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
     import { getFirestore, collection, query, orderBy, getDocs, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
     import { deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
+
 
     // ================= FIREBASE CONFIG =================
     const firebaseConfig = {
@@ -312,63 +314,190 @@
                 <input type="file" name="nbiClearance" accept="image/*,application/pdf" />
               </label><br/><br/>
               
-              <button type="submit">Submit Documents</button>
-              <p id="uploadStatus"></p>
+              <label>
+                6. Police Clearance <span style="color:red">*</span><br/>
+                <input type="file" name="policeClearance" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                7. Birth Certificate <span style="color:red">*</span><br/>
+                <input type="file" name="birthCertificate" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <label>
+                8. Marriage Contract <span style="color:red">*</span><br/>
+                <input type="file" name="marriageContract" accept="image/*,application/pdf" required />
+              </label><br/><br/>
+              
+              <button type="submit" disabled id="submitBtn">Submit Documents</button>
+              <p id="uploadStatus" style="font-weight:bold; margin-top:10px;"></p>
             </form>
+            
+            <hr style="margin: 40px 0;">
+            <h2>Previous Submissions</h2>
+            <input type="text" id="searchInput" placeholder="Search by client name" style="padding: 8px; width: 300px; max-width: 100%; margin-bottom: 10px;" />
+            <button id="searchBtn" style="padding: 8px 12px; margin-left: 5px;">Search</button>
+            <div id="submissionList">Loading submissions...</div>
           `;
 
           const form = document.getElementById("clientDocumentsForm");
+          const submitBtn = document.getElementById("submitBtn");
+          const uploadStatus = document.getElementById("uploadStatus");
+          const submissionList = document.getElementById("submissionList");
+          const searchInput = document.getElementById("searchInput");
+          const searchBtn = document.getElementById("searchBtn");
+
+          // Store submissions locally for filtering
+          let allSubmissions = [];
+
+          // Enable submit when all required files + name filled
+          function checkReady() {
+            const clientName = form.clientName.value.trim();
+            const requiredFields = ["validID", "proofOfIncome", "leaseContract", "barangayClearance", "policeClearance", "birthCertificate", "marriageContract"];
+            let allSelected = clientName.length > 0;
+
+            for (const field of requiredFields) {
+              const input = form.elements[field];
+              if (!input.files || input.files.length === 0) {
+                allSelected = false;
+                break;
+              }
+            }
+
+            submitBtn.disabled = !allSelected;
+          }
+
+          form.addEventListener("change", checkReady);
+          form.clientName.addEventListener("input", checkReady);
+
+          // On submit
           form.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const status = document.getElementById("uploadStatus");
-            
-            const clientNameInput = form.elements["clientName"];
-            const clientName = clientNameInput.value.trim();
+
+            const clientName = form.clientName.value.trim();
             if (!clientName) {
               alert("Please enter the client's name.");
-              clientNameInput.focus();
               return;
             }
 
-            // Check required files
-            const requiredFields = ["validID", "proofOfIncome", "leaseContract", "barangayClearance"];
-            for (const fieldName of requiredFields) {
-              const fileInput = form.elements[fieldName];
-              if (!fileInput.files || fileInput.files.length === 0) {
-                alert(`Please upload the required document: ${fieldName.replace(/([A-Z])/g, " $1")}`);
-                fileInput.focus();
+            const requiredFields = ["validID", "proofOfIncome", "leaseContract", "barangayClearance", "policeClearance", "birthCertificate", "marriageContract"];
+            for (const field of requiredFields) {
+              const input = form.elements[field];
+              if (!input.files || input.files.length === 0) {
+                alert(`Please upload the required document: ${field.replace(/([A-Z])/g, " $1")}`);
                 return;
               }
             }
 
-            status.textContent = "Uploading documents...";
+            submitBtn.disabled = true;
+            uploadStatus.textContent = "Sending confirmation email...";
 
-            // Example: Upload files sequentially — replace uploadFile with your actual upload logic
+            // Prepare email content with document names
+            let docNames = "";
             for (const input of form.elements) {
               if (input.type === "file" && input.files.length > 0) {
-                const file = input.files[0];
-                status.textContent = `Uploading ${input.name.replace(/([A-Z])/g, " $1")} for ${clientName} - ${file.name}`;
-                try {
-                  await uploadFile(file, clientName, input.name);
-                } catch (err) {
-                  status.textContent = `Failed to upload ${file.name}: ${err.message}`;
-                  return;
-                }
+                docNames += `- ${input.name.replace(/([A-Z])/g, " $1")}: ${input.files[0].name}\n`;
               }
             }
 
-            status.textContent = `All documents for ${clientName} uploaded successfully!`;
-            form.reset();
+            const templateParams = {
+              to_email: "carlgenon@gmail.com", // <----- Replace with your desired recipient email
+              client_name: clientName,
+              document_list: docNames,
+              message: `The client ${clientName} has submitted all required documents successfully.`
+            };
+
+            try {
+              await emailjs.send("service_u1n5d9t", "template_f2fwz7a", templateParams);
+              uploadStatus.textContent = "Confirmation email sent!";
+
+              // Save submission info to Firestore
+              await addDoc(collection(db, "documentSubmissions"), {
+                clientName,
+                submittedAt: new Date(),
+                documents: docNames,
+                status: "Submitted",
+                replies: []
+              });
+
+              // Clear form
+              form.reset();
+              submitBtn.disabled = true;
+
+              // Refresh submissions list
+              await loadSubmissions();
+            } catch (err) {
+              uploadStatus.textContent = "Error sending confirmation email: " + err.message;
+              submitBtn.disabled = false;
+            }
           });
 
-          // Dummy upload function to simulate delay - replace with your actual Firebase Storage or backend upload logic
-          async function uploadFile(file, clientName, docType) {
-            return new Promise((resolve) => {
-              setTimeout(() => {
-                resolve();
-              }, 1000); // Simulate 1 second upload delay per file
+          // Function to render submissions (filtered or all)
+          function renderSubmissions(submissions) {
+            submissionList.innerHTML = "";
+            if (submissions.length === 0) {
+              submissionList.innerHTML = "<p>No submissions found.</p>";
+              return;
+            }
+
+            submissions.forEach(data => {
+              const container = document.createElement("div");
+              container.className = "submission-item";
+              container.style.border = "1px solid #ffff";
+              container.style.padding = "10px";
+              container.style.marginBottom = "15px";
+
+              // Format date
+              const dateStr = data.submittedAt?.toDate ? data.submittedAt.toDate().toLocaleString() : new Date(data.submittedAt).toLocaleString();
+
+              container.innerHTML = `
+                <strong>Client:</strong> ${data.clientName}<br/>
+                <strong>Submitted at:</strong> ${dateStr}<br/>
+                <strong>Documents:</strong><pre style="white-space: pre-wrap;">${data.documents}</pre>
+                <strong>Status:</strong> ${data.status || "Submitted"}
+              `;
+
+              submissionList.appendChild(container);
             });
           }
+
+          // Load previous submissions
+          async function loadSubmissions() {
+            submissionList.textContent = "Loading submissions...";
+            try {
+              const q = query(collection(db, "documentSubmissions"), orderBy("submittedAt", "desc"));
+              const snapshot = await getDocs(q);
+
+              if (snapshot.empty) {
+                submissionList.innerHTML = "<p>No submissions yet.</p>";
+                allSubmissions = [];
+                return;
+              }
+
+              allSubmissions = snapshot.docs.map(docItem => docItem.data());
+              renderSubmissions(allSubmissions);
+            } catch (err) {
+              submissionList.textContent = "Error loading submissions: " + err.message;
+            }
+          }
+
+          // Search submissions by client name (case insensitive)
+          function searchSubmissions() {
+            const queryStr = searchInput.value.trim().toLowerCase();
+            if (!queryStr) {
+              renderSubmissions(allSubmissions);
+              return;
+            }
+            const filtered = allSubmissions.filter(sub => sub.clientName.toLowerCase().includes(queryStr));
+            renderSubmissions(filtered);
+          }
+
+          searchBtn.addEventListener("click", searchSubmissions);
+          searchInput.addEventListener("keyup", (e) => {
+            if (e.key === "Enter") searchSubmissions();
+          });
+
+          loadSubmissions();
           break;
 
         /* ================= DEFAULT ================= */
