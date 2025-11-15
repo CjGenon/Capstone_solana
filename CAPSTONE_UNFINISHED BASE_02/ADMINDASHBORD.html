@@ -67,7 +67,7 @@
       try {
         if (event && event.target) event.target.classList.add('active');
       } catch(e) {}
-            //<==============dashboard===========>
+
       switch (section) {
         case "dashboard":
           area.innerHTML = `
@@ -86,12 +86,27 @@
                   <div id="calendar"></div>
                 </div>
                 <div class="inbox-card">
-                  <h3>📩 Inbox Summary</h3>
-                  <p>Check and reply to tenant feedback or messages.</p>
-                  <button id="Feedback Received">Go to Inbox</button>
+                  <h3>Choose one blah</h3>
+                  <p>tab shotcuts.</p>
+                  <select id="dashboardShortcutDropdown" style="padding:8px 12px; border-radius:6px; border:1px solid #ccc; cursor:pointer; width: 100%; max-width: 280px; margin-top: 10px;">
+                    <option value="" selected disabled>Go to...</option>
+                    <option value="Payment Received">Payments Received</option>
+                    <option value="Maintenance Requests">Maintenance Requests</option>
+                    <option value="Tenant Account Creation">Tenant Account Creation</option>
+                    <option value="Feedback Received">Feedback Received</option>
+                  </select>
                 </div>
               </div>
-            </div>`;
+            </div>
+          `;
+
+          // Attach event listener for dropdown navigation
+          document.getElementById('dashboardShortcutDropdown').addEventListener('change', function() {
+            const selected = this.value;
+            if (selected) {
+              loadContent(selected);
+            }
+          });
 
           (function () {
             let slideIndexLocal = 1;
@@ -145,104 +160,153 @@
             generateCalendar();
           })();
           break;
-          //<==============payment tab===========>
+
         case 'Payment Received':
-          area.innerHTML = `
-            <h1>Payments Received</h1>
-            <p>Real-time list of tenant payments (PayPal & Cash-on-Hand).</p>
+        area.innerHTML = `
+          <h1>Payments Received</h1>
+          <p>Real-time list of tenant payments (PayPal & Cash-on-Hand).</p>
 
-            <div class="payment-controls" style="margin-bottom:15px;">
-              <input type="text" id="paymentSearch" placeholder="Search by tenant email..." 
-                style="padding:8px;width:250px;border:1px solid #ccc;border-radius:6px;">
-            </div>
+          <div class="payment-controls" style="margin-bottom:15px;">
+            <input type="text" id="paymentSearch" placeholder="Search by tenant email..." 
+              style="padding:8px;width:260px;border:1px solid #ccc;border-radius:6px;">
+          </div>
 
-            <div id="paypalSection">
-              <h2>💳 PayPal Payment History</h2>
-              <div id="paypalList">Loading PayPal payments...</div>
-            </div>
+          <div id="paypalSection">
+            <h2>💳 PayPal Payments</h2>
+            <div id="paypalList">Loading PayPal payments...</div>
+          </div>
 
-            <hr style="margin:25px 0;">
+          <hr style="margin:25px 0;">
 
-            <div id="cashSection">
-              <h2>💵 Cash-on-Hand Payments</h2>
-              <div id="cashList">Loading cash payments...</div>
-            </div>
-          `;
+          <div id="cashSection">
+            <h2>💵 Cash-on-Hand Payments</h2>
+            <div id="cashList">Loading cash payments...</div>
+          </div>
+        `;
 
-          const paypalList = document.getElementById("paypalList");
-          const cashList = document.getElementById("cashList");
-          const searchInput = document.getElementById("paymentSearch");
+        const paypalList = document.getElementById("paypalList");
+        const cashList = document.getElementById("cashList");
+        const searchInput = document.getElementById("paymentSearch");
 
-          function renderPayments(snapshot) {
-            paypalList.innerHTML = "";
-            cashList.innerHTML = "";
+        function renderPayments(snapshot) {
+          paypalList.innerHTML = "";
+          cashList.innerHTML = "";
 
-            if (snapshot.empty) {
-              paypalList.innerHTML = "<p>No PayPal payments found.</p>";
-              cashList.innerHTML = "<p>No Cash-on-Hand payments found.</p>";
-              return;
+          const searchValue = searchInput.value.toLowerCase();
+
+          let paypalHTML = "";
+          let cashHTML = "";
+
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (!data) return;
+
+            const tenantEmail = data.tenantEmail || "Unknown";
+
+            // Search only by email
+            if (searchValue && !tenantEmail.toLowerCase().includes(searchValue)) return;
+
+            const amount = data.amount ? `₱${Number(data.amount).toLocaleString()}` : "₱0.00";
+            const date = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "Unknown date";
+            const method = data.method || "Unknown";
+            const transactionId = data.transactionId || "N/A";
+
+            let extraDetails = "";
+
+            // PayPal details
+            if (method === "PayPal") {
+              extraDetails += `
+                <p><strong>Payer Name:</strong> ${data.payerName || "Unknown"}</p>
+                <p><strong>Payer Email:</strong> ${data.payerEmail || "Unknown"}</p>
+              `;
             }
 
-            const searchValue = searchInput.value.toLowerCase();
-            let paypalHTML = "";
-            let cashHTML = "";
+            // Cash-on-hand details + buttons
+            if (method === "Cash on Hand") {
+              extraDetails += `
+                <p><strong>Status:</strong> ${data.status || "Pending Verification"}</p>
+                ${
+                  data.receiptUrl
+                    ? `<p><strong>Receipt:</strong><br>
+                      <img src="${data.receiptUrl}" style="max-width:180px;border-radius:8px;margin-top:6px;">
+                      </p>`
+                    : "<p>No receipt uploaded.</p>"
+                }
 
-            snapshot.forEach(docSnap => {
-              const data = docSnap.data();
-              if (!data) return;
+                <button class="approveBtn" data-id="${docSnap.id}"
+                  style="padding:6px 12px;margin-top:6px;background:#4CAF50;color:white;border:none;border-radius:6px;cursor:pointer;">
+                  ✓ Approve
+                </button>
 
-              const tenantEmail = data.tenantEmail?.toLowerCase() || "";
-              if (searchValue && !tenantEmail.includes(searchValue)) return;
-
-              const date = data.timestamp?.toDate ? 
-                data.timestamp.toDate().toLocaleString() : "Unknown date";
-              const amount = data.amount ? `₱${Number(data.amount).toLocaleString()}` : "₱0.00";
-              const paymentId = data.transactionId || docSnap.id;
-              const method = data.paymentMethod || "Unknown";
-
-              const paymentCard = `
-                <div style="border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:10px;">
-                  <p><strong>Tenant:</strong> ${data.tenantEmail || "Unknown Tenant"}</p>
-                  <p><strong>Amount:</strong> ${amount}</p>
-                  <p><strong>Payment Method:</strong> ${method}</p>
-                  <p><strong>Transaction ID:</strong> ${paymentId}</p>
-                  <p><strong>Date:</strong> ${date}</p>
-                </div>
+                <button class="rejectBtn" data-id="${docSnap.id}"
+                  style="padding:6px 12px;margin-top:6px;background:#d9534f;color:white;border:none;border-radius:6px;cursor:pointer;margin-left:6px;">
+                  ✗ Reject
+                </button>
               `;
+            }
 
-              if (method.toLowerCase() === "paypal") paypalHTML += paymentCard;
-              else if (method.toLowerCase().includes("cash")) cashHTML += paymentCard;
-            });
+            const card = `
+              <div style="border:1px solid #ccc;border-radius:10px;padding:14px;margin-bottom:12px;">
+                <p><strong>Tenant Email:</strong> ${tenantEmail}</p>
+                <p><strong>Amount:</strong> ${amount}</p>
+                <p><strong>Method:</strong> ${method}</p>
+                <p><strong>Transaction ID:</strong> ${transactionId}</p>
+                <p><strong>Date:</strong> ${date}</p>
+                ${extraDetails}
+              </div>
+            `;
 
-            paypalList.innerHTML = paypalHTML || "<p>No PayPal payments found.</p>";
-            cashList.innerHTML = cashHTML || "<p>No Cash-on-Hand payments found.</p>";
-          }
-
-          // Listen for real-time changes in payments collection
-          db.collection("payments")
-            .orderBy("timestamp", "desc")
-            .onSnapshot(renderPayments, error => {
-              paypalList.innerHTML = `<p style="color:red;">Error loading payments: ${error.message}</p>`;
-              cashList.innerHTML = `<p style="color:red;">Error loading payments: ${error.message}</p>`;
-            });
-
-          // Re-filter as user types
-          searchInput.addEventListener("input", async () => {
-            const snapshot = await db.collection("payments").orderBy("timestamp", "desc").get();
-            renderPayments(snapshot);
+            if (method === "PayPal") paypalHTML += card;
+            if (method === "Cash on Hand") cashHTML += card;
           });
-          break;
 
-          //<==============mainetnnacw tab===========>
-        case 'Maintenance Requests':
-          area.innerHTML = `
-            <h1>Maintenance Requests</h1>
-            <p>Maintenance requests submitted by tenants will appear here.</p>
-            <div id="maintenanceList" style="margin-top:20px;">
-              <p>Loading maintenance requests...</p>
-            </div>`;
+          paypalList.innerHTML = paypalHTML || "<p>No PayPal payments found.</p>";
+          cashList.innerHTML = cashHTML || "<p>No Cash-on-Hand payments found.</p>";
 
-          async function loadMaintenanceRequests() {
+          attachCashButtons();
+        }
+
+        function attachCashButtons() {
+          document.querySelectorAll(".approveBtn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-id");
+              await db.collection("payments").doc(id).update({ status: "Approved" });
+
+              // 🔔 Custom Popup instead of alert
+              showPopup("Receipt Approved Successfully!");
+            });
+          });
+
+          document.querySelectorAll(".rejectBtn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-id");
+              await db.collection("payments").doc(id).update({ status: "Rejected" });
+
+              // 🔔 Custom Popup instead of alert
+              showPopup("Receipt Rejected.");
+            });
+          });
+        }
+
+        db.collection("payments")
+          .orderBy("timestamp", "desc")
+          .onSnapshot(renderPayments);
+
+        searchInput.addEventListener("input", async () => {
+          const snapshot = await db.collection("payments").orderBy("timestamp", "desc").get();
+          renderPayments(snapshot);
+        })
+        break;
+
+      case 'Maintenance Requests':
+        area.innerHTML = `
+          <h1>Maintenance Requests</h1>
+          <p>Maintenance requests submitted by tenants will appear here.</p>
+          <div id="maintenanceList" style="margin-top:20px;">
+            <p>Loading maintenance requests...</p>
+          </div>`;
+
+        async function loadMaintenanceRequests() {
           const maintenanceList = document.getElementById('maintenanceList');
 
           db.collection("maintenanceRequests")
@@ -253,11 +317,11 @@
                 return;
               }
               maintenanceList.innerHTML = "";
+
               snapshot.forEach(docSnap => {
                 const data = docSnap.data();
                 const id = docSnap.id;
 
-                // Format date helper: 12-hour with AM/PM
                 function formatDateTimeAMPM(date) {
                   if (!date) return "N/A";
                   let d = date.toDate ? date.toDate() : date;
@@ -265,21 +329,20 @@
                   const minutes = d.getMinutes().toString().padStart(2, "0");
                   const ampm = hours >= 12 ? "PM" : "AM";
                   hours = hours % 12;
-                  hours = hours ? hours : 12; // the hour '0' should be '12'
+                  hours = hours ? hours : 12;
                   const month = (d.getMonth() + 1).toString().padStart(2, "0");
                   const day = d.getDate().toString().padStart(2, "0");
                   const year = d.getFullYear();
                   return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
                 }
 
-                // Container card
+                // container
                 const card = document.createElement("div");
                 card.className = "maintenance-card";
                 card.style.border = "1px solid #ccc";
                 card.style.padding = "15px";
                 card.style.marginBottom = "15px";
                 card.style.borderRadius = "8px";
-                // card.style.backgroundColor = "#fafafa";
 
                 // Status dropdown
                 const statusOptions = ["Pending", "Complete"];
@@ -293,7 +356,7 @@
                 });
                 statusSelect.style.marginRight = "10px";
 
-                // Personnel assignment input
+                // Personnel assignment
                 const personnelInput = document.createElement("input");
                 personnelInput.type = "text";
                 personnelInput.placeholder = "Assign maintenance personnel";
@@ -328,9 +391,10 @@
                       maintenanceName: personnelInput.value.trim(),
                       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    alert("Request updated successfully!");
+
+                    showPopup("Request updated successfully!");
                   } catch (error) {
-                    alert("Error updating request: " + error.message);
+                    showPopup("Error updating request: " + error.message);
                   }
                 });
 
@@ -346,21 +410,26 @@
 
                 respondBtn.addEventListener("click", async () => {
                   const responseMessage = prompt("Enter your response message to the tenant:");
-                  if (responseMessage && responseMessage.trim() !== "") {
-                    try {
-                      const requestDocRef = db.collection("maintenanceRequests").doc(id);
-                      await requestDocRef.collection("responses").add({
-                        adminEmail: auth.currentUser.email,
-                        message: responseMessage.trim(),
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                      });
-                      await requestDocRef.update({
-                        responseTime: firebase.firestore.FieldValue.serverTimestamp()
-                      });
-                      alert("Response sent successfully!");
-                    } catch (error) {
-                      alert("Failed to send response: " + error.message);
-                    }
+
+                  if (!responseMessage || responseMessage.trim() === "") {
+                    showPopup("Response message cannot be empty.");
+                    return;
+                  }
+
+                  try {
+                    const requestDocRef = db.collection("maintenanceRequests").doc(id);
+                    await requestDocRef.collection("responses").add({
+                      adminEmail: auth.currentUser.email,
+                      message: responseMessage.trim(),
+                      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    await requestDocRef.update({
+                      responseTime: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    showPopup("Response sent successfully!");
+                  } catch (error) {
+                    showPopup("Failed to send response: " + error.message);
                   }
                 });
 
@@ -370,36 +439,73 @@
                 deleteBtn.className = "btn btn-danger";
                 deleteBtn.style.marginLeft = "8px";
                 deleteBtn.style.cursor = "pointer";
-                deleteBtn.addEventListener("click", async () => {
-                  if (!confirm("Delete this maintenance request? This action cannot be undone.")) return;
-                  try {
-                    await db.collection("maintenanceRequests").doc(id).delete();
-                    alert("Maintenance request deleted.");
-                  } catch (error) {
-                    alert("Failed to delete: " + error.message);
-                  }
+
+                deleteBtn.addEventListener("click", () => {
+                  // custom confirm popup
+                  showPopup(`
+                    <strong>Are you sure?</strong><br>
+                    This maintenance request will be permanently deleted.<br><br>
+                    <button id="confirmDeleteBtn" style="padding:6px 12px;background:#d9534f;color:white;border:none;border-radius:6px;margin-right:10px;">
+                      Delete
+                    </button>
+                    <button onclick="closePopup()" style="padding:6px 12px;background:#777;color:white;border:none;border-radius:6px;">
+                      Cancel
+                    </button>
+                  `);
+
+                  setTimeout(() => {
+                    const confirmBtn = document.getElementById("confirmDeleteBtn");
+                    if (!confirmBtn) return;
+
+                    confirmBtn.addEventListener("click", async () => {
+                      try {
+                        await db.collection("maintenanceRequests").doc(id).delete();
+                        closePopup();
+                        showPopup("Maintenance request deleted.");
+                      } catch (error) {
+                        closePopup();
+                        showPopup("Failed to delete: " + error.message);
+                      }
+                    });
+                  }, 50);
                 });
 
-                // Images (support multiple)
+                // Image slider HTML
                 let imagesHTML = "";
                 if (data.imageUrls && Array.isArray(data.imageUrls) && data.imageUrls.length > 0) {
-                  imagesHTML += `<div style="margin-top:10px;"><strong>Attachments:</strong><br/>`;
-                  data.imageUrls.forEach(url => {
-                    imagesHTML += `<img src="${url}" alt="Attachment" style="max-width:100px; margin-right:10px; border-radius:6px; margin-top:5px;" />`;
-                  });
-                  imagesHTML += "</div>";
+                  imagesHTML = `
+                    <div style="margin-top:-45px;">
+                      <strong>Attachments:</strong><br/>
+                      <div class="image-slider" style="position:relative; max-width:200px; margin-top:5px;">
+                        <img src="${data.imageUrls[0]}" alt="Attachment" style="width:100%; border-radius:6px;" id="img-${id}" />
+                        ${
+                          data.imageUrls.length > 1
+                            ? `<button class="prev-btn" style="position:absolute; top:50%; left:0; transform:translateY(-50%);
+                                background:#8d6c39; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">&#10094;</button>
+                              <button class="next-btn" style="position:absolute; top:50%; right:0; transform:translateY(-50%);
+                                background:#8d6c39; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">&#10095;</button>`
+                            : ''
+                        }
+                      </div>
+                    </div>
+                  `;
                 }
 
-                // Compose innerHTML with all details
                 card.innerHTML = `
                   <h3 style="margin-bottom:8px;">${data.problem || 'Unknown Issue'}</h3>
-                  <p><strong>Tenant:</strong> ${data.tenantEmail || 'Unknown Tenant'}</p>
-                  <p><strong>Details:</strong> ${data.comment || 'No additional details.'}</p>
-                  <p><strong>Preferred Visit Time:</strong> ${formatDateTimeAMPM(data.preferredVisitTime)}</p>
-                  <p><strong>Status:</strong> ${data.status || 'Pending'}</p>
-                  <p><strong>Maintenance Personnel:</strong> ${data.maintenanceName || 'Not assigned'}</p>
-                  <p><strong>Submitted:</strong> ${formatDateTimeAMPM(data.timestamp)}</p>
-                  ${imagesHTML}
+                  <div style="display:flex; gap:20px; align-items:flex-start;">
+                    <div style="flex:1; min-width: 0;">
+                      <p><strong>Tenant:</strong> ${data.tenantEmail || 'Unknown Tenant'}</p>
+                      <p><strong>Details:</strong> ${data.comment || 'No additional details.'}</p>
+                      <p><strong>Preferred Visit Time:</strong> ${formatDateTimeAMPM(data.preferredVisitTime)}</p>
+                      <p><strong>Status:</strong> ${data.status || 'Pending'}</p>
+                      <p><strong>Maintenance Personnel:</strong> ${data.maintenanceName || 'Not assigned'}</p>
+                      <p><strong>Submitted:</strong> ${formatDateTimeAMPM(data.timestamp)}</p>
+                    </div>
+                    <div style="min-width:220px; display:flex; flex-direction:column;">
+                      ${imagesHTML}
+                    </div>
+                  </div>
                 `;
 
                 // Append controls
@@ -410,206 +516,245 @@
                 card.appendChild(deleteBtn);
 
                 maintenanceList.appendChild(card);
+
+                // slider
+                if (data.imageUrls && data.imageUrls.length > 1) {
+                  let currentIndex = 0;
+                  const imgEl = card.querySelector(`#img-${id}`);
+                  const prevBtn = card.querySelector('.prev-btn');
+                  const nextBtn = card.querySelector('.next-btn');
+
+                  prevBtn.addEventListener('click', () => {
+                    currentIndex = (currentIndex - 1 + data.imageUrls.length) % data.imageUrls.length;
+                    imgEl.src = data.imageUrls[currentIndex];
+                  });
+
+                  nextBtn.addEventListener('click', () => {
+                    currentIndex = (currentIndex + 1) % data.imageUrls.length;
+                    imgEl.src = data.imageUrls[currentIndex];
+                  });
+                }
               });
             }, error => {
               maintenanceList.innerHTML = `<p style="color:red;">Error loading requests: ${error.message}</p>`;
             });
         }
 
-          loadMaintenanceRequests();
-          break;
-          //<==============accont creation===========>
-        case 'Tenant Account Creation':
-          area.innerHTML = `
-            <h1>Create New Tenant Account</h1>
-            <form id="createTenantForm">
-              <input type="email" id="tenantEmail" placeholder="Tenant Email" required style="padding:10px;margin-bottom:10px;width:100%;" />
-              <input type="password" id="tenantPassword" placeholder="Temporary Password" required style="padding:10px;margin-bottom:10px;width:100%;" />
-              <button type="submit" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:6px;">Create Tenant</button>
-            </form>
-            <p id="statusMessage" style="margin-top:10px;"></p>`;
+        loadMaintenanceRequests();
+        break;
 
-          setTimeout(() => {
-            const form = document.getElementById('createTenantForm');
-            const statusMessage = document.getElementById('statusMessage');
+        //<==============accont creation===========>
+    case 'Tenant Account Creation':
+      area.innerHTML = `
+        <h1>Create New Tenant Account</h1>
+        <form id="createTenantForm">
+          <input type="email" id="tenantEmail" placeholder="Tenant Email" required style="padding:10px;margin-bottom:10px;width:100%;" />
+          <input type="password" id="tenantPassword" placeholder="Temporary Password" required style="padding:10px;margin-bottom:10px;width:100%;" />
+          <button type="submit" style="padding:10px 20px;background:#8d6c39;color:white;border:none;border-radius:6px;">Create Tenant</button>
+        </form>`;
 
-            form.addEventListener('submit', async function (e) {
-              e.preventDefault();
-              const email = document.getElementById('tenantEmail').value;
-              const password = document.getElementById('tenantPassword').value;
+      // *** PUT YOUR ADMIN CREDENTIALS HERE ***
+      const adminEmail = "adminaccount@solano.com";       // <<<<< change this to your admin email
+      const adminPassword = "123456";                      // <<<<< change this to your admin password
 
-              try {
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const user = userCredential.user;
+      setTimeout(() => {
+        const form = document.getElementById('createTenantForm');
 
-                await db.collection("users").doc(user.uid).set({
-                  email: email,
-                  role: "tenant",
-                  mustChangePassword: true,
-                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+        form.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          const email = document.getElementById('tenantEmail').value;
+          const password = document.getElementById('tenantPassword').value;
 
-                statusMessage.style.color = 'lightgreen';
-                statusMessage.textContent = "Tenant created successfully!";
-                form.reset();
-              } catch (error) {
-                statusMessage.style.color = 'red';
-                statusMessage.textContent = "Error: " + error.message;
-              }
+          try {
+            // 1. Create the tenant user (this will sign you in as the new tenant)
+            const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+
+            // 2. Create Firestore user doc for tenant
+            await db.collection("users").doc(user.uid).set({
+              email: email,
+              role: "tenant",
+              mustChangePassword: true,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-          }, 100);
-          break;
-          //<==============feedback atb===========>
-        case 'Feedback Received':
-          area.innerHTML = `
-            <h1>Feedback from Tenants</h1>
-            <div class="feedback-controls">
-              <label><input type="checkbox" id="selectAllCheckbox" /> Select All</label>
-              <button id="deleteSelectedBtn" class="btn btn-danger" disabled>Delete Selected</button>
-              <button id="refreshFeedbackBtn" class="btn btn-ghost">Refresh</button>
-              <span id="feedbackStatus" style="margin-left:8px;color:#666;"></span>
-            </div>
-            <div id="feedback-list">Loading...</div>`;
 
-          document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedFeedbacks);
-          document.getElementById('selectAllCheckbox').addEventListener('change', toggleSelectAll);
-          document.getElementById('refreshFeedbackBtn').addEventListener('click', loadFeedbacks);
-          loadFeedbacks();
-          break;
+            // 3. Sign back in as admin to restore admin session
+            await auth.signInWithEmailAndPassword(adminEmail, adminPassword);
 
-        default:
-          area.innerHTML = '<h1>Welcome</h1><p>Select a menu option from the sidebar.</p>';
-      }
-    }
-
-    async function loadFeedbacks() {
-      const feedbackList = document.getElementById('feedback-list');
-      const statusSpan = document.getElementById('feedbackStatus');
-      const deleteBtn = document.getElementById('deleteSelectedBtn');
-      const selectAll = document.getElementById('selectAllCheckbox');
-
-      feedbackList.innerHTML = '<p>Loading feedback...</p>';
-      statusSpan.textContent = '';
-
-      try {
-        const snapshot = await db.collection("feedback").orderBy("timestamp", "desc").get();
-
-        if (snapshot.empty) {
-          feedbackList.innerHTML = '<p>No feedback found.</p>';
-          deleteBtn.disabled = true;
-          selectAll.checked = false;
-          return;
-        }
-
-        feedbackList.innerHTML = '';
-
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          const id = docSnap.id;
-
-          const wrapper = document.createElement('div');
-          wrapper.className = 'feedback-item';
-          wrapper.style.border = '1px solid #ccc';
-          wrapper.style.padding = '10px';
-          wrapper.style.marginBottom = '10px';
-
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.className = 'feedback-checkbox';
-          checkbox.dataset.id = id;
-          checkbox.id = `chk-${id}`;
-          checkbox.classList.add('feedback-item-checkbox');
-
-          checkbox.addEventListener('change', () => {
-            const anyChecked = !!document.querySelector('.feedback-checkbox:checked');
-            deleteBtn.disabled = !anyChecked;
-
-            const total = document.querySelectorAll('.feedback-checkbox').length;
-            const checked = document.querySelectorAll('.feedback-checkbox:checked').length;
-            selectAll.checked = (total === checked && total > 0);
-            selectAll.indeterminate = (checked > 0 && checked < total);
-          });
-
-          const content = document.createElement('div');
-          content.className = 'feedback-item-content';
-
-          const timeText = data.timestamp?.toDate
-            ? data.timestamp.toDate().toLocaleString()
-            : (data.timestamp && data.timestamp.seconds ? new Date(data.timestamp.seconds * 1000).toLocaleString() : 'Unknown time');
-
-          const stars = "⭐".repeat(data.rating || 0);
-
-          content.innerHTML = `
-            <strong>From:</strong> ${data.tenantEmail || "Unknown"}<br/>
-            <strong>Rating:</strong> ${stars}<br/>
-            <strong>Question 2:</strong> ${escapeHtml(data.question2 || "No answer")}<br/>
-            <strong>Question 3:</strong> ${escapeHtml(data.question3 || "No answer")}<br/>
-            <small style="color:#666">${timeText}</small>`;
-
-          const perDeleteBtn = document.createElement('button');
-          perDeleteBtn.textContent = 'Delete';
-          perDeleteBtn.className = 'btn btn-danger';
-          perDeleteBtn.style.marginLeft = '8px';
-          perDeleteBtn.addEventListener('click', async () => {
-            if (!confirm('Delete this feedback? This action cannot be undone.')) return;
-            try {
-              await db.collection('feedback').doc(id).delete();
-              statusSpan.textContent = 'Feedback deleted.';
-              loadFeedbacks();
-            } catch (error) {
-              alert('Delete failed: ' + error.message);
-            }
-          });
-
-          wrapper.appendChild(checkbox);
-          wrapper.appendChild(content);
-          wrapper.appendChild(perDeleteBtn);
-          feedbackList.appendChild(wrapper);
+            showPopup("Tenant created successfully!");
+            form.reset();
+          } catch (error) {
+            showPopup("Error: " + error.message);
+          }
         });
+      }, 100);
+      break;
 
+        //<==============feedback atb===========>
+    case 'Feedback Received':
+      area.innerHTML = `
+        <h1>Feedback from Tenants</h1>
+        <div class="feedback-controls">
+          <label><input type="checkbox" id="selectAllCheckbox" /> Select All</label>
+          <button id="deleteSelectedBtn" class="btn btn-danger" disabled>Delete Selected</button>
+          <button id="refreshFeedbackBtn" class="btn btn-ghost">Refresh</button>
+          <span id="feedbackStatus" style="margin-left:8px;color:#666;"></span>
+        </div>
+        <div id="feedback-list">Loading...</div>`;
+
+      document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedFeedbacks);
+      document.getElementById('selectAllCheckbox').addEventListener('change', toggleSelectAll);
+      document.getElementById('refreshFeedbackBtn').addEventListener('click', loadFeedbacks);
+      loadFeedbacks();
+      break;
+
+      default:
+        area.innerHTML = '<h1>Welcome</h1><p>Select a menu option from the sidebar.</p>';
+    }
+  }
+
+  async function loadFeedbacks() {
+    const feedbackList = document.getElementById('feedback-list');
+    const statusSpan = document.getElementById('feedbackStatus');
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const selectAll = document.getElementById('selectAllCheckbox');
+
+    feedbackList.innerHTML = '<p>Loading feedback...</p>';
+    statusSpan.textContent = '';
+
+    try {
+      const snapshot = await db.collection("feedback").orderBy("timestamp", "desc").get();
+
+      if (snapshot.empty) {
+        feedbackList.innerHTML = '<p>No feedback found.</p>';
         deleteBtn.disabled = true;
         selectAll.checked = false;
-        selectAll.indeterminate = false;
-
-      } catch (error) {
-        feedbackList.innerHTML = `<p style="color:red;">Error loading feedback: ${error.message}</p>`;
+        return;
       }
-    }
 
-    function toggleSelectAll(e) {
-      const checked = e.target.checked;
-      document.querySelectorAll('.feedback-checkbox').forEach(cb => cb.checked = checked);
-      document.getElementById('deleteSelectedBtn').disabled = !checked;
-    }
+      feedbackList.innerHTML = '';
 
-    async function deleteSelectedFeedbacks() {
-      const selected = [...document.querySelectorAll('.feedback-checkbox:checked')].map(cb => cb.dataset.id);
-      if (selected.length === 0) return alert("No feedback selected.");
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const id = docSnap.id;
 
-      if (!confirm(`Delete ${selected.length} selected feedback(s)? This action cannot be undone.`)) return;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'feedback-item';
+        wrapper.style.border = '1px solid #ccc';
+        wrapper.style.padding = '10px';
+        wrapper.style.marginBottom = '10px';
 
-      try {
-        const batch = db.batch();
-        selected.forEach(id => {
-          const ref = db.collection('feedback').doc(id);
-          batch.delete(ref);
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'feedback-checkbox';
+        checkbox.dataset.id = id;
+        checkbox.id = `chk-${id}`;
+        checkbox.classList.add('feedback-item-checkbox');
+
+        checkbox.addEventListener('change', () => {
+          const anyChecked = !!document.querySelector('.feedback-checkbox:checked');
+          deleteBtn.disabled = !anyChecked;
+
+          const total = document.querySelectorAll('.feedback-checkbox').length;
+          const checked = document.querySelectorAll('.feedback-checkbox:checked').length;
+          selectAll.checked = (total === checked && total > 0);
+          selectAll.indeterminate = (checked > 0 && checked < total);
         });
-        await batch.commit();
-        document.getElementById('feedbackStatus').textContent = `Deleted ${selected.length} feedback(s).`;
-        loadFeedbacks();
-      } catch (error) {
-        alert("Delete failed: " + error.message);
-      }
-    }
 
-    function escapeHtml(text) {
-      return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        const content = document.createElement('div');
+        content.className = 'feedback-item-content';
+
+        const timeText = data.timestamp?.toDate
+          ? data.timestamp.toDate().toLocaleString()
+          : (data.timestamp && data.timestamp.seconds ? new Date(data.timestamp.seconds * 1000).toLocaleString() : 'Unknown time');
+
+        const stars = "⭐".repeat(data.rating || 0);
+
+        content.innerHTML = `
+          <strong>From:</strong> ${data.tenantEmail || "Unknown"}<br/>
+          <strong>Rating:</strong> ${stars}<br/>
+          <strong>Question 2:</strong> ${escapeHtml(data.question2 || "No answer")}<br/>
+          <strong>Question 3:</strong> ${escapeHtml(data.question3 || "No answer")}<br/>
+          <small style="color:#666">${timeText}</small>`;
+
+        const perDeleteBtn = document.createElement('button');
+        perDeleteBtn.textContent = 'Delete';
+        perDeleteBtn.className = 'btn btn-danger';
+        perDeleteBtn.style.marginLeft = '8px';
+        perDeleteBtn.addEventListener('click', async () => {
+          if (!confirm('Delete this feedback? This action cannot be undone.')) return;
+          try {
+            await db.collection('feedback').doc(id).delete();
+            statusSpan.textContent = 'Feedback deleted.';
+            loadFeedbacks();
+          } catch (error) {
+            alert('Delete failed: ' + error.message);
+          }
+        });
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(content);
+        wrapper.appendChild(perDeleteBtn);
+        feedbackList.appendChild(wrapper);
+      });
+
+      deleteBtn.disabled = true;
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+
+    } catch (error) {
+      feedbackList.innerHTML = `<p style="color:red;">Error loading feedback: ${error.message}</p>`;
     }
-  </script>
+  }
+
+  function toggleSelectAll(e) {
+    const checked = e.target.checked;
+    document.querySelectorAll('.feedback-checkbox').forEach(cb => cb.checked = checked);
+    document.getElementById('deleteSelectedBtn').disabled = !checked;
+  }
+
+  async function deleteSelectedFeedbacks() {
+    const selected = [...document.querySelectorAll('.feedback-checkbox:checked')].map(cb => cb.dataset.id);
+    if (selected.length === 0) return alert("No feedback selected.");
+
+    if (!confirm(`Delete ${selected.length} selected feedback(s)? This action cannot be undone.`)) return;
+
+    try {
+      const batch = db.batch();
+      selected.forEach(id => {
+        const ref = db.collection('feedback').doc(id);
+        batch.delete(ref);
+      });
+      await batch.commit();
+      document.getElementById('feedbackStatus').textContent = `Deleted ${selected.length} feedback(s).`;
+      loadFeedbacks();
+    } catch (error) {
+      alert("Delete failed: " + error.message);
+    }
+  }
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+  window.showPopup = function(message) {
+    document.getElementById("popupMessage").innerHTML = message;
+    document.getElementById("customPopup").classList.remove("hidden");
+  };
+
+  window.closePopup = function() {
+    document.getElementById("customPopup").classList.add("hidden");
+  };
+</script>
+<div id="customPopup" class="popup hidden">
+  <div class="popup-content">
+    <p id="popupMessage">Your message goes here</p>
+    <button onclick="closePopup()">Close</button>
+  </div>
+</div>
 </body>
 </html>
