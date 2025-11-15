@@ -77,10 +77,6 @@
           updateGreeting();
           break;
 
-        case 'profile':
-          mainContent.innerHTML = '<h1>My Profile</h1><p>View and edit your personal information.</p>';
-          break;
-
         case 'maintenance':
           mainContent.innerHTML = `
             <div class="maintenance-tab" style="display:flex; gap:20px; flex-wrap: wrap;">
@@ -220,9 +216,36 @@
                   <strong>Maintenance Personnel:</strong> ${maintenanceName}<br/>
                   <strong>Response Time:</strong> ${responseTime}<br/>
                   <strong>Submitted:</strong> ${timeStamp}<br/>
-                  <strong>Admin Responses:</strong>
                 `;
 
+                // Create an images container for uploaded photos
+                const imagesContainer = document.createElement('div');
+                imagesContainer.style.marginTop = '10px';
+                imagesContainer.style.display = 'flex';
+                imagesContainer.style.flexWrap = 'wrap';
+                imagesContainer.style.gap = '8px';
+
+                if (data.imageUrls && data.imageUrls.length > 0) {
+                  const imagesLabel = document.createElement('strong');
+                  imagesLabel.textContent = 'Uploaded Images:';
+                  imagesContainer.appendChild(imagesLabel);
+                  imagesContainer.appendChild(document.createElement('br'));
+
+                  data.imageUrls.forEach(url => {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.style.width = '100px';
+                    img.style.height = 'auto';
+                    img.style.borderRadius = '6px';
+                    img.style.boxShadow = '0 0 5px rgba(0,0,0,0.3)';
+                    img.style.objectFit = 'cover';
+                    imagesContainer.appendChild(img);
+                  });
+                } else {
+                  imagesContainer.innerHTML = '<em>No images uploaded.</em>';
+                }
+
+                item.appendChild(imagesContainer);
                 item.appendChild(responsesContainer);
                 historyList.appendChild(item);
 
@@ -257,41 +280,63 @@
 
           loadHistory();
 
+          async function uploadToCloudinary(file) {
+            const url = `https://api.cloudinary.com/v1_1/dfklsyjch/upload`;
+            const preset = 'tenant_uploads';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', preset);
+
+            const response = await fetch(url, {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!response.ok) {
+              throw new Error('Cloudinary upload failed');
+            }
+
+            const data = await response.json();
+            return data.secure_url; // the uploaded image URL
+          }
+
+
           submitButton.addEventListener('click', async () => {
             const problem = problemSelect.value;
             const comment = otherComment.value.trim();
             const preferredVisitTime = preferredDateInput.value;
 
             if (!problem) {
-              alert('Please select an issue type.');
+              await showPopup("Please Please select an issue type");
               return;
             }
 
             if (!preferredVisitTime) {
-              alert('Please select your preferred maintenance visit date and time.');
+              await showPopup('Please select your preferred maintenance visit date and time.');
               return;
             }
 
             const selectedDate = new Date(preferredVisitTime);
             const nowDate = new Date();
             if (selectedDate < nowDate) {
-              alert('Preferred visit time cannot be in the past.');
+              await showPopup('Preferred visit time cannot be in the past.');
               return;
             }
 
             if (problem === 'other') {
               if (!comment) {
-                alert('Please describe the problem in "Others".');
+                await showPopup('Please describe the problem in "Others".');
                 return;
               }
               if (!imageUpload.files || imageUpload.files.length < 2) {
-                alert('Please upload at least 2 JPEG images.');
+                await showPopup('Please upload at least 2 JPEG images.');
                 return;
               }
 
               for (const file of imageUpload.files) {
                 if (file.type !== "image/jpeg") {
-                  alert('Only JPEG images are allowed.');
+                  await showPopup('Only JPEG images are allowed.');
                   return;
                 }
               }
@@ -305,15 +350,11 @@
 
               let imageUrls = [];
               if (problem === 'other' && imageUpload.files.length > 0) {
-                const storage = getStorage(app);
                 for (const file of imageUpload.files) {
-                  const storageRef = ref(storage, `maintenanceImages/${tenantEmail}/${Date.now()}_${file.name}`);
-                  await uploadBytes(storageRef, file);
-                  const url = await getDownloadURL(storageRef);
+                  const url = await uploadToCloudinary(file);
                   imageUrls.push(url);
                 }
               }
-
               await addDoc(collection(db, "maintenanceRequests"), {
                 tenantEmail,
                 problem,
@@ -344,147 +385,233 @@
           });
           break;
 
-        case 'billing':
-          mainContent.innerHTML = `
-            <div class="payment-tab">
-              <h2>Billing and Payments</h2>
-              <p>Pay your monthly dues securely using PayPal.</p>
+       case 'billing':
+        mainContent.innerHTML = `
+          <div class="payment-tab">
+            <h2>Billing and Payments</h2>
+            <p>Pay your monthly dues securely or send a cash receipt.</p>
 
-              <div id="invoiceSection" style="margin-top:20px;">
-                <h3>Your Current Invoice</h3>
-                <p id="invoiceDetails">Loading your invoice...</p>
-                <div id="paypal-button-container" style="margin-top:20px;"></div>
-              </div>
-
-              <hr style="margin:25px 0;">
-
-              <h3>Payment History</h3>
-              <div id="paymentHistory" style="max-height:300px; overflow-y:auto; font-size:14px;">
-                <p>Loading your payment history...</p>
-              </div>
+            <div id="invoiceSection" style="margin-top:20px;">
+              <h3>Your Current Invoice</h3>
+              <p id="invoiceDetails">Loading your invoice...</p>
             </div>
+
+            <hr style="margin:25px 0;">
+
+            <h3>Choose Payment Method</h3>
+            <label>
+              <input type="radio" name="paymentMethod" value="paypal" checked /> PayPal
+            </label>
+            <label style="margin-left: 20px;">
+              <input type="radio" name="paymentMethod" value="cash" /> Cash on Hand
+            </label>
+
+            <div id="paypal-section" style="margin-top:20px;">
+              <div id="paypal-button-container"></div>
+            </div>
+
+            <div id="cash-section" style="margin-top:20px; display:none;">
+              <p>Please upload a photo of your cash payment receipt (JPEG only):</p>
+              <input type="file" id="cashReceipt" accept="image/jpeg" />
+              <button id="submitCashPayment" style="margin-top:10px; padding:10px 20px; background:#8d6c39; color:white; border:none; border-radius:8px; cursor:pointer;">Submit Cash Receipt</button>
+              <p id="cashStatus" style="margin-top:10px; color:green;"></p>
+            </div>
+
+            <hr style="margin:25px 0;">
+
+            <h3>Payment History</h3>
+            <div id="paymentHistory" style="max-height:300px; overflow-y:auto; font-size:14px;">
+              <p>Loading your payment history...</p>
+            </div>
+          </div>
+        `;
+
+        const invoiceDetails = document.getElementById('invoiceDetails');
+        const paymentHistory = document.getElementById('paymentHistory');
+        const paypalContainer = document.getElementById('paypal-button-container');
+        const cashSection = document.getElementById('cash-section');
+        const paypalSection = document.getElementById('paypal-section');
+        const paymentMethodRadios = document.querySelectorAll('input[name="paymentMethod"]');
+        const cashReceiptInput = document.getElementById('cashReceipt');
+        const submitCashPaymentBtn = document.getElementById('submitCashPayment');
+        const cashStatus = document.getElementById('cashStatus');
+
+        // Switch payment method UI
+        paymentMethodRadios.forEach(radio => {
+          radio.addEventListener('change', () => {
+            if (radio.value === 'cash' && radio.checked) {
+              cashSection.style.display = 'block';
+              paypalSection.style.display = 'none';
+            } else if (radio.value === 'paypal' && radio.checked) {
+              cashSection.style.display = 'none';
+              paypalSection.style.display = 'block';
+            }
+          });
+        });
+
+        async function loadInvoice() {
+          const tenantEmail = await getCurrentUserEmail();
+          invoiceDetails.innerHTML = `
+            <strong>Tenant:</strong> ${tenantEmail}<br>
+            <strong>Amount Due:</strong> ₱2,500<br>
+            <strong>Due Date:</strong> 25th of this month
           `;
+        }
 
-          const invoiceDetails = document.getElementById('invoiceDetails');
-          const paymentHistory = document.getElementById('paymentHistory');
-          const paypalContainer = document.getElementById('paypal-button-container');
+        async function loadPaymentHistory() {
+          paymentHistory.innerHTML = '<p>Loading your payment history...</p>';
+          const tenantEmail = await getCurrentUserEmail();
 
-          // Load tenant invoice
-          async function loadInvoice() {
-            const tenantEmail = await getCurrentUserEmail();
-            invoiceDetails.innerHTML = `
-              <strong>Tenant:</strong> ${tenantEmail}<br>
-              <strong>Amount Due:</strong> ₱2,500<br>
-              <strong>Due Date:</strong> 25th of this month
-            `;
-          }
+          try {
+            const q = query(
+              collection(db, "payments"),
+              where("tenantEmail", "==", tenantEmail),
+              orderBy("timestamp", "desc")
+            );
+            const snapshot = await getDocs(q);
 
-          // Load tenant payment history from Firestore
-          async function loadPaymentHistory() {
-            paymentHistory.innerHTML = '<p>Loading your payment history...</p>';
-            const tenantEmail = await getCurrentUserEmail();
+            if (snapshot.empty) {
+              paymentHistory.innerHTML = '<p>No payment records found.</p>';
+              return;
+            }
 
-            try {
-              const q = query(
-                collection(db, "payments"),
-                where("tenantEmail", "==", tenantEmail),
-                orderBy("timestamp", "desc")
-              );
-              const snapshot = await getDocs(q);
+            paymentHistory.innerHTML = '';
+            snapshot.forEach(doc => {
+              const d = doc.data();
+              const time = d.timestamp ? d.timestamp.toDate().toLocaleString() : "N/A";
+              const div = document.createElement('div');
+              div.style.borderBottom = "1px solid #ccc";
+              div.style.padding = "8px 0";
 
-              if (snapshot.empty) {
-                paymentHistory.innerHTML = '<p>No payment records found.</p>';
-                return;
+              // Show receipt image if cash payment
+              let receiptHtml = '';
+              if (d.method === "Cash on Hand" && d.receiptUrl) {
+                receiptHtml = `<br><strong>Receipt:</strong><br><img src="${d.receiptUrl}" alt="Cash Receipt" style="max-width:150px; border-radius:6px; margin-top:5px;" />`;
               }
 
-              paymentHistory.innerHTML = '';
-              snapshot.forEach(doc => {
-                const d = doc.data();
-                const time = d.timestamp ? d.timestamp.toDate().toLocaleString() : "N/A";
-                const div = document.createElement('div');
-                div.style.borderBottom = "1px solid #ccc";
-                div.style.padding = "8px 0";
-                div.innerHTML = `
-                  <strong>Invoice ID:</strong> ${d.invoiceId}<br>
-                  <strong>Amount:</strong> ₱${d.amount}<br>
-                  <strong>Status:</strong> ${d.status}<br>
-                  <strong>Date:</strong> ${time}<br>
-                  <strong>Payment Method:</strong> ${d.method}
-                `;
-                paymentHistory.appendChild(div);
+              div.innerHTML = `
+                <strong>Invoice ID:</strong> ${d.invoiceId || '-'}<br>
+                <strong>Amount:</strong> ₱${d.amount}<br>
+                <strong>Status:</strong> ${d.status}<br>
+                <strong>Date:</strong> ${time}<br>
+                <strong>Payment Method:</strong> ${d.method}
+                ${receiptHtml}
+              `;
+              paymentHistory.appendChild(div);
+            });
+          } catch (error) {
+            paymentHistory.innerHTML = `<p style="color:red;">Error loading history: ${error.message}</p>`;
+          }
+        }
+
+        // PayPal setup (same as your existing code)
+        async function setupPayPal() {
+          const tenantEmail = await getCurrentUserEmail();
+          const amount = 2500;
+          const invoiceId = "INV-" + Date.now();
+
+          paypal.Buttons({
+            style: {
+              color: "gold",
+              shape: "rect",
+              label: "pay",
+              height: 40
+            },
+
+            createOrder: function(data, actions) {
+              return actions.order.create({
+                purchase_units: [{
+                  reference_id: invoiceId,
+                  description: "Monthly Dues Payment - Solano Hills",
+                  amount: {
+                    currency_code: "PHP",
+                    value: amount.toString()
+                  }
+                }]
               });
-            } catch (error) {
-              paymentHistory.innerHTML = `<p style="color:red;">Error loading history: ${error.message}</p>`;
+            },
+
+            onApprove: async function(data, actions) {
+              const order = await actions.order.capture();
+              console.log("Payment successful:", order);
+
+              await addDoc(collection(db, "payments"), {
+                tenantEmail,
+                invoiceId,
+                amount,
+                method: "PayPal",
+                status: "Paid",
+                transactionId: order.id,
+                payerName: order.payer.name.given_name + " " + order.payer.name.surname,
+                payerEmail: order.payer.email_address,
+                timestamp: serverTimestamp()
+              });
+
+              await showPopup("✅ Payment successful! Thank you, " + order.payer.name.given_name + ".");
+              loadPaymentHistory();
+            },
+
+            onCancel: async function() {
+              await showPopup("⚠️ Payment cancelled by user.");
+            },
+
+            onError: async function(err) {
+              console.error("PayPal error:", err);
+              await showPopup("❌ Payment failed. Please try again later.");
             }
+          }).render(paypalContainer);
+        }
+
+        // Handle cash payment submission
+        submitCashPaymentBtn.addEventListener('click', async () => {
+          cashStatus.style.color = 'gray';
+          cashStatus.textContent = '';
+
+          const file = cashReceiptInput.files[0];
+          if (!file) {
+            await showPopup('Please select a JPEG receipt image to upload.');
+            return;
           }
 
-          // Initialize PayPal Live Buttons
-          async function setupPayPal() {
+          if (file.type !== 'image/jpeg') {
+            await showPopup('Only JPEG images are allowed.');
+            return;
+          }
+
+          cashStatus.textContent = 'Uploading receipt... Please wait.';
+          try {
             const tenantEmail = await getCurrentUserEmail();
-            const amount = 2500;
+            const receiptUrl = await uploadToCloudinary(file);
+            const amount = 2500; // You can adjust this if dynamic
             const invoiceId = "INV-" + Date.now();
 
-            paypal.Buttons({
-              style: {
-                color: "gold",
-                shape: "rect",
-                label: "pay",
-                height: 40
-              },
+            // Save payment record with receipt URL
+            await addDoc(collection(db, "payments"), {
+              tenantEmail,
+              invoiceId,
+              amount,
+              method: "Cash on Hand",
+              status: "Pending Verification",
+              receiptUrl,
+              timestamp: serverTimestamp()
+            });
 
-              // Create order
-              createOrder: function(data, actions) {
-                return actions.order.create({
-                  purchase_units: [{
-                    reference_id: invoiceId,
-                    description: "Monthly Dues Payment - Solano Hills",
-                    amount: {
-                      currency_code: "PHP",
-                      value: amount.toString()
-                    }
-                  }]
-                });
-              },
-
-              // On successful approval
-              onApprove: async function(data, actions) {
-                const order = await actions.order.capture();
-                console.log("Payment successful:", order);
-
-                // Store payment record in Firestore
-                await addDoc(collection(db, "payments"), {
-                  tenantEmail,
-                  invoiceId,
-                  amount,
-                  method: "PayPal",
-                  status: "Paid",
-                  transactionId: order.id,
-                  payerName: order.payer.name.given_name + " " + order.payer.name.surname,
-                  payerEmail: order.payer.email_address,
-                  timestamp: serverTimestamp()
-                });
-
-                alert("✅ Payment successful! Thank you, " + order.payer.name.given_name + ".");
-                loadPaymentHistory();
-              },
-
-              // On cancel
-              onCancel: function() {
-                alert("⚠️ Payment cancelled by user.");
-              },
-
-              // On error
-              onError: function(err) {
-                console.error("PayPal error:", err);
-                alert("❌ Payment failed. Please try again later.");
-              }
-            }).render(paypalContainer);
+            cashStatus.style.color = 'green';
+            cashStatus.textContent = "Receipt uploaded successfully! Waiting for admin verification.";
+            cashReceiptInput.value = "";
+            loadPaymentHistory();
+          } catch (error) {
+            console.error(error);
+            cashStatus.style.color = 'red';
+            cashStatus.textContent = "Failed to upload receipt: " + error.message;
           }
+        });
 
-          loadInvoice();
-          loadPaymentHistory();
-          setupPayPal();
-          break;
+        loadInvoice();
+        loadPaymentHistory();
+        setupPayPal();
+        break;
+
   
         case 'feedback':
           loadFeedbackForm();
@@ -530,6 +657,7 @@
 
       // Rating star click handler
       ratingStars.forEach(star => {
+        star.style.opacity = "0.3";
         star.addEventListener("click", () => {
           const val = star.getAttribute("data-value");
           ratingValueInput.value = val;
@@ -582,7 +710,7 @@
 
             // Validate rating selected
             if (!ratingValueInput.value) {
-              alert("Please select a rating.");
+              await showPopup("Please select a rating.");
               return;
             }
 
@@ -659,6 +787,21 @@
     }
 
     showWelcomeBack();
+
+  window.showPopup = function(message) {
+    document.getElementById("popupMessage").innerHTML = message;
+    document.getElementById("customPopup").classList.remove("hidden");
+  };
+
+  window.closePopup = function() {
+    document.getElementById("customPopup").classList.add("hidden");
+  };
   </script>
+<div id="customPopup" class="popup hidden">
+  <div class="popup-content">
+    <p id="popupMessage">Your message goes here</p>
+    <button onclick="closePopup()">Close</button>
+  </div>
+</div>
 </body>
 </html>
