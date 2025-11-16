@@ -749,6 +749,10 @@
   window.closePopup = function() {
     document.getElementById("customPopup").classList.add("hidden");
   };
+
+  window.onload = function () {
+    loadContent('dashboard');
+  };
 </script>
 <div id="customPopup" class="popup hidden">
   <div class="popup-content">
