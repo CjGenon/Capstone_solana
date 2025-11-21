@@ -43,8 +43,6 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
     import { getFirestore, collection, query, orderBy, getDocs, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
     import { deleteDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
-
 
     // ================= FIREBASE CONFIG =================
     const firebaseConfig = {
@@ -239,7 +237,7 @@
                   `;
                   repliedList.appendChild(messageEl);
                 } else {
-                  // Unreplied message with Reply button
+                  // Unreplied message with Reply and Send Pricelist buttons
                   messageEl.innerHTML = `
                     <strong>Name:</strong> ${data.name}<br/>
                     <strong>Email:</strong> ${data.email}<br/>
@@ -247,6 +245,7 @@
                     <strong>Employment Type:</strong> ${data.Employement_Type}<br/>
                     <strong>Message:</strong> ${data.message}<br/>
                     <button onclick="showReplyForm('${data.email}', '${docItem.id}', '${data.name}')">Reply</button>
+                    <button onclick="sendPricelistEmail('${data.email}')">Send Pricelist</button>
                     <div id="reply-${docItem.id}" style="display:none; margin-top:10px;">
                       <textarea id="replyText-${docItem.id}" rows="3" cols="40" placeholder="Type your reply..."></textarea><br>
                       <button onclick="sendReply('${data.email}', '${docItem.id}', '${data.name}')">Send Reply</button>
@@ -283,213 +282,23 @@
         case "document":
           mainContent.innerHTML = `
             <h1>Upload Client Documents</h1>
-            <form id="clientDocumentsForm">
-              <label for="clientName"><strong>Client Name:</strong> <span style="color:red">*</span></label><br/>
-              <input type="text" id="clientName" name="clientName" placeholder="Enter client's full name" required style="width: 100%; max-width: 400px; padding: 8px; margin-bottom: 20px;" />
-              
-              <p>Please upload the following required documents:</p>
-
-              <label>
-                1. Valid ID (Government-issued) <span style="color:red">*</span><br/>
-                <input type="file" name="validID" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                2. Proof of Income <span style="color:red">*</span><br/>
-                <input type="file" name="proofOfIncome" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                3. Lease Contract <span style="color:red">*</span><br/>
-                <input type="file" name="leaseContract" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                4. Barangay Clearance <span style="color:red">*</span><br/>
-                <input type="file" name="barangayClearance" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                5. NBI Clearance (optional)<br/>
-                <input type="file" name="nbiClearance" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                6. Police Clearance <span style="color:red">*</span><br/>
-                <input type="file" name="policeClearance" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                7. Birth Certificate <span style="color:red">*</span><br/>
-                <input type="file" name="birthCertificate" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <label>
-                8. Marriage Contract <span style="color:red">*</span><br/>
-                <input type="file" name="marriageContract" accept="image/*,application/pdf" />
-              </label><br/><br/>
-              
-              <!-- ALWAYS ENABLED NOW -->
-              <button type="submit" id="submitBtn">Submit Documents</button>
-              <p id="uploadStatus" style="font-weight:bold; margin-top:10px;"></p>
-            </form>
-
-            <hr style="margin: 40px 0;">
-            <h2>Previous Submissions</h2>
-            <input type="text" id="searchInput" placeholder="Search by client name" style="padding: 8px; width: 300px; max-width: 100%; margin-bottom: 10px;" />
-            <button id="searchBtn" style="padding: 8px 12px; margin-left: 5px;">Search</button>
-            <div id="submissionList">Loading submissions...</div>
+            <p>To submit client documents, please use the button below to open the document upload form.</p>
+            <button id="openFormBtn" style="
+              padding: 12px 20px;
+              background-color: #4CAF50;
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 16px;
+              cursor: pointer;
+            ">Open Document Upload Form</button>
           `;
 
-          const form = document.getElementById("clientDocumentsForm");
-          const submitBtn = document.getElementById("submitBtn");
-          const uploadStatus = document.getElementById("uploadStatus");
-          const submissionList = document.getElementById("submissionList");
-          const searchInput = document.getElementById("searchInput");
-          const searchBtn = document.getElementById("searchBtn");
-
-          // Store submissions locally for filtering
-          let allSubmissions = [];
-
-          // FORM SUBMIT — ALWAYS ENABLED, BUT CHECK REQUIRED FILES
-          form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-
-            const clientName = form.clientName.value.trim();
-            if (!clientName) {
-              alert("Please enter the client's name.");
-              return;
-            }
-
-            // Required documents list
-            const requiredFields = [
-              "validID",
-              "proofOfIncome",
-              "leaseContract",
-              "barangayClearance",
-              "policeClearance",
-              "birthCertificate",
-              "marriageContract"
-            ];
-
-            // Check missing files
-            for (const field of requiredFields) {
-              const input = form.elements[field];
-              if (!input.files || input.files.length === 0) {
-                alert(`Please upload the required document: ${field.replace(/([A-Z])/g, " $1")}`);
-                return;
-              }
-            }
-
-            submitBtn.disabled = true;
-            uploadStatus.textContent = "Sending confirmation email...";
-
-            // Build document list string
-            let docNames = "";
-            for (const input of form.elements) {
-              if (input.type === "file" && input.files.length > 0) {
-                docNames += `- ${input.name.replace(/([A-Z])/g, " $1")}: ${input.files[0].name}\n`;
-              }
-            }
-
-            const templateParams = {
-              to_email: "carlgenon@gmail.com",
-              client_name: clientName,
-              document_list: docNames,
-              message: `The client ${clientName} has submitted all required documents successfully.`
-            };
-
-            try {
-              await emailjs.send("service_u1n5d9t", "template_f2fwz7a", templateParams);
-              uploadStatus.textContent = "Confirmation email sent!";
-
-              // Save submission info
-              await addDoc(collection(db, "documentSubmissions"), {
-                clientName,
-                submittedAt: new Date(),
-                documents: docNames,
-                status: "Submitted"
-              });
-
-              form.reset();
-              submitBtn.disabled = false;
-
-              await loadSubmissions();
-            } catch (err) {
-              uploadStatus.textContent = "Error sending confirmation email: " + err.message;
-              submitBtn.disabled = false;
-            }
+          const openFormBtn = document.getElementById("openFormBtn");
+          openFormBtn.addEventListener("click", () => {
+            window.open("https://docs.google.com/forms/d/e/1FAIpQLSc9GekVOFqdbdXQF9wqOJPZeOwh4e69T8ZJvvPbKNXlHlvlVA/viewform?usp=dialog", "_blank");
           });
 
-          // Render submissions
-          function renderSubmissions(submissions) {
-            submissionList.innerHTML = "";
-            if (submissions.length === 0) {
-              submissionList.innerHTML = "<p>No submissions found.</p>";
-              return;
-            }
-
-            submissions.forEach(data => {
-              const container = document.createElement("div");
-              container.className = "submission-item";
-              container.style.border = "1px solid #ffff";
-              container.style.padding = "10px";
-              container.style.marginBottom = "15px";
-
-              const dateStr = data.submittedAt?.toDate
-                ? data.submittedAt.toDate().toLocaleString()
-                : new Date(data.submittedAt).toLocaleString();
-
-              container.innerHTML = `
-                <strong>Client:</strong> ${data.clientName}<br/>
-                <strong>Submitted at:</strong> ${dateStr}<br/>
-                <strong>Documents:</strong><pre style="white-space: pre-wrap;">${data.documents}</pre>
-                <strong>Status:</strong> ${data.status || "Submitted"}
-              `;
-
-              submissionList.appendChild(container);
-            });
-          }
-
-          // Load submissions
-          async function loadSubmissions() {
-            submissionList.textContent = "Loading submissions...";
-            try {
-              const q = query(collection(db, "documentSubmissions"), orderBy("submittedAt", "desc"));
-              const snapshot = await getDocs(q);
-
-              if (snapshot.empty) {
-                submissionList.innerHTML = "<p>No submissions yet.</p>";
-                allSubmissions = [];
-                return;
-              }
-
-              allSubmissions = snapshot.docs.map(docItem => docItem.data());
-              renderSubmissions(allSubmissions);
-            } catch (err) {
-              submissionList.textContent = "Error loading submissions: " + err.message;
-            }
-          }
-
-          // Search submissions
-          function searchSubmissions() {
-            const term = searchInput.value.trim().toLowerCase();
-            if (!term) {
-              renderSubmissions(allSubmissions);
-              return;
-            }
-            const filtered = allSubmissions.filter(sub =>
-              sub.clientName.toLowerCase().includes(term)
-            );
-            renderSubmissions(filtered);
-          }
-
-          searchBtn.addEventListener("click", searchSubmissions);
-          searchInput.addEventListener("keyup", (e) => {
-            if (e.key === "Enter") searchSubmissions();
-          });
-
-          loadSubmissions();
           break;
 
         /* ================= DEFAULT ================= */
@@ -564,6 +373,28 @@
       } catch (error) {
         console.error("EmailJS Error:", error);
         alert("Failed to send reply: " + JSON.stringify(error));
+      }
+    };
+
+    // ================= SEND PRICELIST EMAIL VIA EMAILJS =================
+    window.sendPricelistEmail = async function (toEmail) {
+      // Use direct download link for Google Drive file
+      const pricelistUrl = "https://drive.google.com/uc?export=download&id=1G84pqvHUuAK46TUUO25eRXwyBEbO8VPm";
+
+      const templateParams = {
+        to_email: toEmail,
+        name: "Project Manager",
+        from_name: "Project Manager",
+        message: `Hello,\n\nPlease find the apartment pricelist here:\n${pricelistUrl}\n\nBest regards.`,
+        title: "Apartment Pricelist"
+      };
+
+      try {
+        await emailjs.send("service_u1n5d9t", "template_f2fwz7a", templateParams);
+        alert("Pricelist sent successfully to " + toEmail);
+      } catch (error) {
+        console.error("EmailJS Error:", error);
+        alert("Failed to send pricelist: " + error.message);
       }
     };
   </script>
